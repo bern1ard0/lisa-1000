@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lisa 1000</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="nav-container">
+            <nav>
+                <ul>
+                    <li><a href="#">Home</a></li>
+                    <li><a href="library.html">Library</a></li>
+                    <li>    
+                        <select id="language">
+                            <option value="fr">Français</option> 
+                            <option value="es">Español</option> 
+                            <option value="de">Deutsch</option>
+                            <option value="zh">中文</option>
+                        <option value="ar">العربية</option>
+                        </select>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        <div class="title-container">
+            <h1>LISA 1000</h1>
+        </div>
+    </header>  
+    <section id="intro">
+        <div>
+            <h2 id="intro-header"></h2>
+        </div>
+        <div>
+            <p>Did you know storytelling is one of the most effective methods in language learning with LISA 1000? <br>Imagine being immersed in a thousand (1000) short, and interesting stories all tailored to enhance your English-learning experience.
+                <br>LISA 1000 harnesses the power of artificial intelligence to completely revolutionize your English-Learning Experience.</p>
+        </div>
+    </section>    
+    <main>
+        <article id="story-container">
+            <h2 id="story-title">Featured Story</h2>
+            <p id="story-content">[Story content goes here]</p>
+            <button id="readButton">Read Aloud</button>
+            <button id="narrateButton">
+                <img src="recorder_icon.png" alt="Record" style="width:20px;height:20px;">
+                Narrate
+            </button>
+        </article>
+        <aside id="recommendations">
+            <h3>Recommended Stories</h3>
+            <ul>
+                <li>Story 1</li>
+                <li>Story 2</li>
+                <li>More...</li>
+            </ul>
+        </aside>
+    </main>
+    <footer>
+        <button id="aboutButton">About Us</button>
+    </footer>
+    <script src="js/script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</body>
+</html>

@@ -11,7 +11,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 app.use(express.static('public'));
 // Configure OpenAI SDK
-const openai = new OpenAI({ apiKey:{Your_OPEN_AI_KEY} });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.post('/generate-speech', async (req, res) => {
     const inputText = req.body.text; // Get text from client request

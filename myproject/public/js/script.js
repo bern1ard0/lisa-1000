@@ -19,6 +19,18 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    
+    // Add event listener to the narrate button
+    const narrateButton = document.getElementById('narrateButton');
+    if (narrateButton) {
+        narrateButton.addEventListener('click', function() {
+            const nativeLanguage = document.getElementById('nativeLanguage').value;
+            handleNarration(nativeLanguage);
+        });
+    }
+
+    
+
     // Load initial story on page load
     fetchAndDisplayStory(1);
 });
@@ -119,6 +131,31 @@ document.body.addEventListener('dblclick', async () => {
         console.error('Error translating text:', error);
     }
 });
+
+// Function to handle narration
+function handleNarration(nativeLanguage) {
+    // Use the webkit prefix if needed
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+
+    // Set the recognition language
+    recognition.lang = nativeLanguage === 'default' ? 'en-US' : nativeLanguage;
+
+    recognition.onstart = function() {
+        console.log('Speech recognition started');
+    };
+
+    recognition.onerror = function(event) {
+        console.error('Speech recognition error:', event.error);
+    };
+
+    recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        displayAlert('You said:', transcript);
+    };
+
+    recognition.start();
+}
 
 function languageName(lang) {
     switch (lang) {

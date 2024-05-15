@@ -13,7 +13,8 @@
                 <ul>
                     <li><a href="#">Home</a></li>
                     <li><a href="library.html">Library</a></li>
-                    <li>    
+                    <li><a href="create-story.html">Create Story</a></li> <!-- Add Create Story tab -->
+                    <li>   
                         <select id="nativeLanguage">
                             <option value="default">I speak...</option>
                             <option value="en">English</option>
@@ -23,6 +24,9 @@
                             <option value="zh">中文</option>
                             <option value="ar">العربية</option>
                         </select>
+                    </li>
+                    <li>
+                        <div id="translation-toggle" class="translation-toggle">T</div> <!-- Translation toggle -->
                     </li>
                 </ul>
             </nav>
@@ -48,7 +52,8 @@
             <button id="narrateButton">
                 <img src="images/mic.png" alt="Record" style="width:20px;height:20px;">
                 Narrate
-            </button>            
+            </button>
+            <button id="translateButton">Translate</button>            
         </article>
         <aside id="recommendations">
             <h3>Recommended Stories</h3>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Story</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="nav-container">
+            <nav>
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="library.html">Library</a></li>
+                    <li><a href="create-story.html">Create Story</a></li> <!-- Add Create Story tab -->
+                    <li>   
+                        <select id="nativeLanguage">
+                            <option value="default">I speak...</option>
+                            <option value="en">English</option>
+                            <option value="fr">Français</option>
+                            <option value="es">Español</option>
+                            <option value="de">Deutsch</option>
+                            <option value="zh">中文</option>
+                            <option value="ar">العربية</option>
+                        </select>
+                    </li>
+                    <li>
+                        <div id="translation-toggle" class="translation-toggle">T</div> <!-- Translation toggle -->
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        <div>
+            <h1>Create Story</h1>
+        </div>
+
+    </header>
+    <main>
+        <section id="create-story-section">
+            <h2>Choose Your Option</h2>
+            <button id="takeMattersButton">Lisa's Story</button>
+            <button id="generateStoryButton">My Story</button>
+        </section>
+
+        <section id="take-matters-section" style="display:none;">
+            <h2>Lisa's Story</h2>
+            <button id="randomStoryButton">Random</button>
+            <button id="fineTuneButton">Fine Tune</button>
+            <div id="fineTuneOptions" style="display:none;">
+                <h3>Fine Tune Your Story</h3>
+                <label for="genre">Genre:</label>
+                <input type="text" id="genre" name="genre"><br>
+                <label for="length">Length:</label>
+                <input type="text" id="length" name="length"><br>
+                <!-- Add more options as needed -->
+                <button id="generateFineTunedStoryButton">Generate Story</button>
+            </div>
+        </section>
+
+        <section id="generate-story-section" style="display:none;">
+            <h2>My Story</h2>
+            <form id="generateStoryForm">
+                <label for="title">Title:</label>
+                <input type="text" id="title" name="title"><br>
+                <label for="theme">Theme:</label>
+                <input type="text" id="theme" name="theme"><br>
+                <label for="inputLanguage">Input Language:</label>
+                <select id="inputLanguage" name="inputLanguage">
+                    <option value="en">English</option>
+                    <option value="fr">French</option>
+                    <option value="es">Spanish</option>
+                    <option value="de">German</option>
+                    <option value="zh">Chinese</option>
+                    <option value="ar">Arabic</option>
+                </select><br>
+                <label for="textInput">Text Input:</label>
+                <textarea id="textInput" name="textInput"></textarea><br>
+                <label for="outputLanguage">Output Language:</label>
+                <select id="outputLanguage" name="outputLanguage">
+                    <option value="en">English</option>
+                    <option value="fr">French</option>
+                    <option value="es">Spanish</option>
+                    <option value="de">German</option>
+                    <option value="zh">Chinese</option>
+                    <option value="ar">Arabic</option>
+                </select><br>
+                <label for="music">Music:</label>
+                <input type="checkbox" id="music" name="music"><br>
+                <label for="scenery">Scenery:</label>
+                <input type="checkbox" id="scenery" name="scenery"><br>
+                <label for="video">Video:</label>
+                <input type="checkbox" id="video" name="video"><br>
+                <label for="subtitles">Subtitles:</label>
+                <input type="checkbox" id="subtitles" name="subtitles"><br>
+                <button type="submit">Generate Story</button>
+            </form>
+        </section>
+
+        <!-- Story container for displaying generated stories -->
+        <div id="c-story-container"></div>
+        <div id="button-container" style="display: none;">
+            <label for="voiceDropdown">Select Voice:</label> 
+            <select id="voiceDropdown">
+                <option value="">Select Voice</option>
+                <option value="elon">Elon Musk</option>
+                <option value="morgan_freeman">Morgan Freeman</option>
+                <option value="ariana-grande">Ariana Grande</option>
+                <option value="rihanna">Rihanna</option>
+                <option value="drake">Drake</option>
+                <option value="kanye-west">Kanye West</option>
+                <option value="oprah_winfrey">Oprah Winfrey</option>
+                <option value="trumpty">Trump</option>
+                <option value="mcgregor">Conor McGregor</option>
+            </select>
+            <button id="readButton">Read</button>
+            <button id="translateButton">Translate</button>
+            <button id="narrateButton">Narrate</button>
+            <button id="animateButton">Animate</button>
+        </div>
+    </main>
+    <script src="js/createStory.js"></script>
+</body>
+</html>

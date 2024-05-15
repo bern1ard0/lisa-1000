@@ -8,14 +8,35 @@
 </head>
 <body>
     <header>
-        <nav>
-            <ul>
-                <li><a href="index.html">Home</a></li>
-                <li><a href="library.html">Library</a></li>
-            </ul>
-        </nav>
-        <h1>Library</h1>
+        <div class="nav-container">
+            <nav>
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="library.html">Library</a></li>
+                    <li><a href="create-story.html">Create Story</a></li> <!-- Add Create Story tab -->
+                    <li>   
+                        <select id="nativeLanguage">
+                            <option value="default">I speak...</option>
+                            <option value="en">English</option>
+                            <option value="fr">Français</option>
+                            <option value="es">Español</option>
+                            <option value="de">Deutsch</option>
+                            <option value="zh">中文</option>
+                            <option value="ar">العربية</option>
+                        </select>
+                    </li>
+                    <li>
+                        <div id="translation-toggle" class="translation-toggle">T</div> <!-- Translation toggle -->
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        <div>
+            <h1>Library</h1>
+        </div>
+        
     </header>
+    
     <main id="story-list">
         <!-- Stories will be loaded here dynamically -->
     </main>

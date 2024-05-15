@@ -1,3 +1,29 @@
+// Function to generate a story and an image with the server endpoint
+async function generateStory(prompt) {
+    console.log('Contacting OpenAI server with prompt:', prompt); // Debugging code
+
+    try {
+        const response = await fetch('/generate-story', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ prompt: prompt })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('Received story and image from OpenAI:', data); // Debugging code
+        return data;
+    } catch (error) {
+        console.error('Network or server error:', error);
+        return null;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // Attach event listeners to story links
     const storyLinks = document.querySelectorAll('.story-link');
@@ -18,18 +44,6 @@ document.addEventListener('DOMContentLoaded', function() {
             readText(story);
         });
     }
-
-    
-    // Add event listener to the narrate button
-    const narrateButton = document.getElementById('narrateButton');
-    if (narrateButton) {
-        narrateButton.addEventListener('click', function() {
-            const nativeLanguage = document.getElementById('nativeLanguage').value;
-            handleNarration(nativeLanguage);
-        });
-    }
-
-    
 
     // Load initial story on page load
     fetchAndDisplayStory(1);
@@ -131,31 +145,6 @@ document.body.addEventListener('dblclick', async () => {
         console.error('Error translating text:', error);
     }
 });
-
-// Function to handle narration
-function handleNarration(nativeLanguage) {
-    // Use the webkit prefix if needed
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-
-    // Set the recognition language
-    recognition.lang = nativeLanguage === 'default' ? 'en-US' : nativeLanguage;
-
-    recognition.onstart = function() {
-        console.log('Speech recognition started');
-    };
-
-    recognition.onerror = function(event) {
-        console.error('Speech recognition error:', event.error);
-    };
-
-    recognition.onresult = function(event) {
-        const transcript = event.results[0][0].transcript;
-        displayAlert('You said:', transcript);
-    };
-
-    recognition.start();
-}
 
 function languageName(lang) {
     switch (lang) {

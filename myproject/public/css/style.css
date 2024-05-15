@@ -68,11 +68,41 @@ header {
     padding: 20px 0; /* Adds vertical padding */
 }
 
+/* Translation Toggle Style */
+.translation-toggle {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+    text-align: center;
+    border-radius: 50%;
+    background-color: lightblue;
+    color: black;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.translation-toggle:hover {
+    background-color: darkblue;
+    color: white;
+}
+
+.translation-toggle.active {
+    background-color: darkblue;
+    color: white;
+}
+
 main {
     display: flex;
     flex-direction: column;
     align-items: center;
     margin: 20px;
+}
+
+#c-story-container {
+    opacity: 1;
+    transition: opacity 0.5s ease;
 }
 
 #definition-tooltip {
@@ -83,6 +113,46 @@ main {
     border-radius: 5px;
     display: none;
     z-index: 1000;
+}
+
+/* Style for the dropdown menus */
+select {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #000;
+    border-radius: 10px;
+    background-color: #f0f8ff; /* Light blue background */
+    color: #000; /* Black text */
+    font-size: 16px;
+    font-family: 'Arial', sans-serif;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+    appearance: none; /* Remove default arrow */
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23000\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\' class=\'feather feather-chevron-down\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E');
+    background-repeat: no-repeat;
+    background-position: right 10px top 50%;
+    background-size: 12px 12px;
+}
+
+select:focus {
+    outline: none;
+    border-color: #007bff; /* Blue border on focus */
+}
+
+select option {
+    padding: 10px;
+}
+
+/* Container for dropdowns */
+.dropdown-container {
+    margin: 10px 0;
+}
+
+/* Additional styling for better alignment and spacing */
+label {
+    font-weight: bold;
+    margin-bottom: 5px;
+    display: block;
 }
 
 .highlight {
@@ -142,6 +212,11 @@ aside {
 
 #intro-header {
     white-space: nowrap;  /* Prevents text from wrapping to the next line */
+}
+
+#button-container {
+    display: flex;
+    gap: 10px; /* Space between buttons */
 }
 
 

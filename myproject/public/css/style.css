@@ -1,74 +1,100 @@
-/* Base Styles */
 :root {
-    --bg-color-main: #FFFFFF;        /* White - Used for the main background color */
-    --bg-color-secondary: #E0F7FA;   /* Light Blue - Secondary background color, for panels or secondary elements */
-    --bg-color-story: #0288D1;       /* Strong Blue - Used for story backgrounds or important fields */
-    --border-color: #0277BD;         /* Dark Blue - Used for borders and strong accents */
-    --text-primary: #0D47A1; /* Dark Blue - Primary text color for high contrast */
-    --text-secondary: #1976D2; /* Medium Blue - Secondary text color, softer than primary */
-    --accent-color: #00BCD4;         /* Cyan - Accent color for buttons and interactive elements */
+    --bg-color-main: #F7F9FB;
+    --bg-color-secondary: #E0F7FA;
+    --bg-color-story: #0288D1;
+    --border-color: #0277BD;
+    --text-primary: #0D47A1;
+    --text-secondary: #1976D2;
+    --accent-color: #00BCD4;
+    --header-background: #00796B;
+    --header-text-color: #FFFFFF;
 }
 
 body {
-    font-family: '', serif; /* Roboto is a modern, friendly font */
+    font-family: 'Arial', sans-serif;
     margin: 0;
     padding: 0;
     background-color: var(--bg-color-main);
     color: var(--text-primary);
-    line-height: 1.6; /* Improved readability */
-    font-size: 18px; /* Larger base font size for readability */
+    line-height: 1.6;
+    font-size: 18px;
 }
 
 header {
     display: flex;
     flex-direction: column;
-    align-items: stretch; /* Makes sure that child elements can fill the width */
-    width: 100%; /* Ensures the header spans the full width of the viewport */
-    background-color: var(--bg-color-secondary); /* Assuming you have this variable set */
-    color: var(--text-primary);
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    align-items: stretch;
+    width: 100%;
+    background-color: var(--header-background);
+    color: var(--header-text-color);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
+ 
 
 .nav-container {
     display: flex;
-    justify-content: flex-end; /* Aligns navigation links to the right */
-    padding-right: 20px; /* Adds padding to the right to keep content off the edge */
-    width: 100%; /* Ensures nav-container spans the full width */
+    justify-content: flex-end;
+    padding: 10px 20px;
+    background-color: var(--header-background);
 }
 
 .nav-container nav {
-    margin: 0; /* Removes margin around the <nav> */
+    margin: 0;
 }
 
 .nav-container nav ul {
     list-style-type: none;
     padding: 0;
     margin: 0;
-    display: flex; /* Lays out the list items in a row */
+    display: flex;
 }
 
 .nav-container nav ul li {
-    margin-left: 20px; /* Adds spacing between links */
+    margin-left: 20px;
+    position: relative;
 }
 
 .nav-container nav ul li a {
     text-decoration: none;
     font-size: 16px;
-    color: #000; /* Adjust as per your color scheme */
+    color: var(--header-text-color);
+    transition: color 0.3s ease;
 }
 
 .nav-container nav ul li a:hover {
-    text-decoration: underline;
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+.nav-container nav ul li::before {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 2px;
+    bottom: 0;
+    left: 0;
+    background-color: var(--accent-color);
+    visibility: hidden;
+    transition: all 0.3s ease-in-out;
+}
+
+.nav-container nav ul li:hover::before {
+    visibility: visible;
+    width: 100%;
 }
 
 .title-container {
     display: flex;
-    justify-content: center; /* Centers the title */
-    width: 100%; /* Ensures title-container spans the full width */
-    padding: 20px 0; /* Adds vertical padding */
+    justify-content: center;
+    padding: 20px 0;
 }
 
-/* Translation Toggle Style */
+.title-container h1 {
+    margin: 0;
+    font-family: cursive;
+    font-size: 75px;
+}
+
 .translation-toggle {
     display: inline-block;
     width: 40px;
@@ -76,20 +102,20 @@ header {
     line-height: 40px;
     text-align: center;
     border-radius: 50%;
-    background-color: lightblue;
-    color: black;
+    background-color: var(--accent-color);
+    color: var(--header-text-color);
     font-weight: bold;
     cursor: pointer;
     transition: background-color 0.3s, color 0.3s;
 }
 
 .translation-toggle:hover {
-    background-color: darkblue;
+    background-color: var(--border-color);
     color: white;
 }
 
 .translation-toggle.active {
-    background-color: darkblue;
+    background-color: var(--border-color);
     color: white;
 }
 
@@ -100,89 +126,55 @@ main {
     margin: 20px;
 }
 
-#c-story-container {
-    opacity: 1;
-    transition: opacity 0.5s ease;
-}
-
-#definition-tooltip {
-    position: absolute;
-    background-color: #f9f9f9;
-    border: 1px solid #ccc;
-    padding: 10px;
-    border-radius: 5px;
-    display: none;
-    z-index: 1000;
-}
-
-/* Style for the dropdown menus */
-select {
-    width: 100%;
-    padding: 10px;
-    border: 2px solid #000;
+#intro {
+    background-color: var(--bg-color-secondary);
+    padding: 20px;
     border-radius: 10px;
-    background-color: #f0f8ff; /* Light blue background */
-    color: #000; /* Black text */
-    font-size: 16px;
-    font-family: 'Arial', sans-serif;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease;
-    appearance: none; /* Remove default arrow */
-    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23000\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\' class=\'feather feather-chevron-down\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E');
-    background-repeat: no-repeat;
-    background-position: right 10px top 50%;
-    background-size: 12px 12px;
-}
-
-select:focus {
-    outline: none;
-    border-color: #007bff; /* Blue border on focus */
-}
-
-select option {
-    padding: 10px;
-}
-
-/* Container for dropdowns */
-.dropdown-container {
-    margin: 10px 0;
-}
-
-/* Additional styling for better alignment and spacing */
-label {
-    font-weight: bold;
-    margin-bottom: 5px;
-    display: block;
-}
-
-.highlight {
-    background-color: yellow !important; /* Highlight color */
-    color: black !important; /* Text color when highlighted */
+    text-align: center;
 }
 
 #story-container {
-    border: 2px solid var(--border-color);
-    padding: 20px;
-    margin-top: 20px;
     background-color: var(--bg-color-story);
-    width: 100%;
-    max-width: 600px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    color: var(--header-text-color);
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    max-width: 800px;
+    margin-top: 20px;
+    line-height: 1.8;
+}
+
+#story-title {
+    text-align: center;
+    color: var(--header-text-color);
+}
+
+#button-container {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
 }
 
 button {
     padding: 10px 20px;
     font-size: 16px;
     cursor: pointer;
-    background-color: var(--accent-color); /* Use the accent color for the button background */
-    color: #FFFFFF; /* White color for the text for high contrast */
+    background-color: var(--accent-color);
+    color: white;
     border: none;
     border-radius: 5px;
     transition: background-color 0.3s;
 }
 
 button:hover {
-    background-color: var(--accent-color);
+    background-color: var(--border-color);
+}
+
+.mic-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 5px;
 }
 
 aside {
@@ -194,43 +186,61 @@ aside {
     border-left: 5px solid var(--accent-color);
 }
 
-.us, .fr, .de, .es, .cn, .ar {
-    display: inline-block;
-    height: 20px;
-    width: 32px;
-    background-size: cover;
-    vertical-align: middle;
-    margin: 5px;
+aside h3 {
+    margin-top: 0;
 }
 
-.us { background-image: url('https://lh3.googleusercontent.com/-9BEUs3L9gVE/VhE40dddysI/AAAAAAAAkm0/YIls2k0h79w/s1600/united-states-flag-animation.gif'); }
-.fr { background-image: url('https://lh3.googleusercontent.com/-Ym4VD8myqUM/VhEyjRvvWOI/AAAAAAAAjaw/zTPj6-jD9gw/s1600/france-flag-animation.gif'); }
-.de { background-image: url('https://lh3.googleusercontent.com/-oPzOMIOg4mw/VhEyxoushSI/AAAAAAAAjdw/rxNagrCV45k/s1600/germany-flag-animation.gif'); }
-.es { background-image: url('https://lh3.googleusercontent.com/-W24Nmtyp4sY/VhE3ut8oUdI/AAAAAAAAkZU/04Vp7Z0AEyE/s1600/spain-flag-animation.gifg'); }
-.cn { background-image: url('https://lh3.googleusercontent.com/-zFu9YOux_0o/VhExb8_8E8I/AAAAAAAAjLQ/Us7zTFAku-Q/s1600/china-flag-animation.gif'); }
-.ar { background-image: url('https://lh3.googleusercontent.com/-0TIKrIkN5gY/VhE3K3hn3FI/AAAAAAAAkSU/31JBLnPNr_E/s1600/saudi-arabia-flag-animation.gif'); }
-
-#intro-header {
-    white-space: nowrap;  /* Prevents text from wrapping to the next line */
+footer {
+    text-align: center;
+    padding: 10px;
+    background-color: var(--header-background);
+    color: var(--header-text-color);
 }
 
-#button-container {
-    display: flex;
-    gap: 10px; /* Space between buttons */
+select, input, textarea {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid var(--border-color);
+    border-radius: 5px;
+    background-color: var(--bg-color-main);
+    color: var(--text-primary);
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+select {
+    appearance: none;
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23000\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\' class=\'feather feather-chevron-down\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'%3E%3C/polyline%3E%3C/svg%3E');
+    background-repeat: no-repeat;
+    background-position: right 10px top 50%;
+    background-size: 12px 12px;
+}
+
+select:focus, input:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent-color);
 }
 
 /* Tooltip styles */
 .translation-tooltip {
     position: absolute;
-    background-color: #f0f8ff;
-    border: 1px solid #000;
+    background-color: var(--bg-color-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 5px;
     padding: 5px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     z-index: 1000;
     font-size: 14px;
-    max-width: 200px;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.mic-icon {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    margin-left: 10px;
 }
 
 /* Popup styles */
@@ -240,7 +250,7 @@ aside {
     left: 50%;
     transform: translate(-50%, -20%);
     background-color: white;
-    border: 2px solid #000;
+    border: 2px solid var(--border-color);
     border-radius: 10px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     z-index: 1000;
@@ -263,6 +273,23 @@ aside {
     font-weight: bold;
 }
 
+.us, .fr, .de, .es, .cn, .ar {
+    display: inline-block;
+    height: 50px;
+    width: 62px;
+    background-size: cover;
+    vertical-align: middle;
+    margin: 5px;
+}
+
+.us { background-image: url('https://lh3.googleusercontent.com/-9BEUs3L9gVE/VhE40dddysI/AAAAAAAAkm0/YIls2k0h79w/s1600/united-states-flag-animation.gif'); }
+.fr { background-image: url('https://lh3.googleusercontent.com/-Ym4VD8myqUM/VhEyjRvvWOI/AAAAAAAAjaw/zTPj6-jD9gw/s1600/france-flag-animation.gif'); }
+.de { background-image: url('https://lh3.googleusercontent.com/-oPzOMIOg4mw/VhEyxoushSI/AAAAAAAAjdw/rxNagrCV45k/s1600/germany-flag-animation.gif'); }
+.es { background-image: url('https://lh3.googleusercontent.com/-W24Nmtyp4sY/VhE3ut8oUdI/AAAAAAAAkZU/04Vp7Z0AEyE/s1600/spain-flag-animation.gifg'); }
+.cn { background-image: url('https://lh3.googleusercontent.com/-zFu9YOux_0o/VhExb8_8E8I/AAAAAAAAjLQ/Us7zTFAku-Q/s1600/china-flag-animation.gif'); }
+.ar { background-image: url('https://lh3.googleusercontent.com/-0TIKrIkN5gY/VhE3K3hn3FI/AAAAAAAAkSU/31JBLnPNr_E/s1600/saudi-arabia-flag-animation.gif'); }
+
+
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -271,7 +298,6 @@ aside {
         opacity: 1;
     }
 }
-
 
 @media (max-width: 768px) {
     header, nav ul, main, aside {

@@ -50,10 +50,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 const messages = [
-    { lang: 'English', text: 'Welcome to Lisa 1000', flag: 'us' },
-    { lang: 'French', text: 'Bienvenue à Lisa 1000', flag: 'fr' },
-    { lang: 'German', text: 'Willkommen bei Lisa 1000', flag: 'de' },
-    { lang: 'Spanish', text: 'Bienvenido a Lisa 1000', flag: 'es' },
+    { lang: 'English', text: 'Welcome to LISA 1000', flag: 'us' },
+    { lang: 'French', text: 'Bienvenue à LISA 1000', flag: 'fr' },
+    { lang: 'German', text: 'Willkommen bei LISA 1000', flag: 'de' },
+    { lang: 'Spanish', text: 'Bienvenido a LISA 1000', flag: 'es' },
     { lang: 'Chinese', text: '欢迎来到丽莎1000', flag: 'cn' },
     { lang: 'Arabic', text: 'مرحبا بك في ليزا 1000', flag: 'ar' }
 ];

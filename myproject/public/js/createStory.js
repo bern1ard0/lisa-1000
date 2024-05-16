@@ -237,6 +237,29 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error reading story aloud:', error);
         }
     }
+// Function to generate speech for the text
+async function readTextAloud(text) {
+    try {
+        const response = await fetch('/generate-speech', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text: text })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const audioUrl = data.audioUrl;
+        const audio = new Audio(audioUrl);
+        audio.play();
+    } catch (error) {
+        console.error('Error reading text aloud:', error);
+    }
+}
     
 // Function to fetch the definition of a word
 async function defineText(word) {
@@ -301,6 +324,7 @@ async function handleDoubleClick() {
         }
     }
 }
+
 
 // Function to show popup with content
 function showPopup(content) {

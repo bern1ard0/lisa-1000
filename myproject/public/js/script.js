@@ -156,12 +156,21 @@ function languageName(lang) {
     }
 }
 
-function displayAlert(title, text) {
+function displayAlert(title, text, audioUrl) {
     Swal.fire({
         title: title,
-        text: text,
+        html: `
+            <p>${text}</p>
+            <button id="audioButton">Play Audio</button>
+            <audio id="audioPlayer" src="${audioUrl}" style="display: none;"></audio>
+        `,
         icon: 'success',
-        confirmButtonText: 'Close'
+        confirmButtonText: 'Close',
+        onOpen: () => {
+            document.getElementById('audioButton').addEventListener('click', () => {
+                readText
+            });
+        }
     });
 }
 
@@ -206,6 +215,7 @@ if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
     console.error('Your browser does not support SpeechRecognition');
 }
 
+
 document.body.addEventListener('dblclick', async () => {
     // Get the selected text
     const selectedText = window.getSelection().toString().trim();
@@ -217,7 +227,7 @@ document.body.addEventListener('dblclick', async () => {
 
     try {
         // Get the definition of the selected text and show an alert with the definition
-        await getDefinitionAndPlayAudio(selectedText);
+        await defineText(selectedText);
     } catch (error) {
         // If an error occurs, log it to the console
         console.error('Failed to get definition:', error);
@@ -247,7 +257,22 @@ function displayStory(story) {
         contentElement.innerHTML = story.sentences.map(sentence => `<p>${sentence}</p>`).join(''); // Dynamically update the content
     }
 }
-
+async function defineText(text) {
+    try {
+        const response = await fetch('/definition', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text: text })
+        });
+        const data = await response.json();
+        return data.definition;
+    } catch (error) {
+        console.error('Error defining text:', error);
+        return text;
+    }
+}
 
 async function readText(input) {
     try {

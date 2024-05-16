@@ -52,11 +52,22 @@
                 <label for="genre">Genre:</label>
                 <input type="text" id="genre" name="genre"><br>
                 <label for="length">Length:</label>
-                <input type="text" id="length" name="length"><br>
-                <!-- Add more options as needed -->
+                <select id="length" name="length">
+                    <option value="very short">Very Short</option>
+                    <option value="short">Short</option>
+                    <option value="medium">Medium</option>
+                    <option value="long">Long</option>
+                </select><br>
+                <label for="characterNum">Number of Participants:</label>
+                <input type="number" id="characterNum" name="characterNum"><br>
+                <label for="emotion">Emotion (how you'd like to feel after listening):</label>
+                <input type="text" id="emotion" name="emotion"><br>
+                <label for="language">Language:</label>
+                <input type="text" id="language" name="language"><br>
                 <button id="generateFineTunedStoryButton">Generate Story</button>
             </div>
         </section>
+        
 
         <section id="generate-story-section" style="display:none;">
             <h2>My Story</h2>

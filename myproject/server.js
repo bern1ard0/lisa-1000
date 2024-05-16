@@ -4,22 +4,18 @@ import OpenAI from 'openai';
 import fetch from 'node-fetch';
 import fs from 'fs';
 import path from 'path';
-
 const app = express();
 app.use(express.json());
 app.use(cors()); // Enable CORS for all routes
 const PORT = process.env.PORT || 3000;
 app.use(express.static('public'));
 
-const request = require('request');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const util = require('util');
-const requestPromise = util.promisify(request);
 
 
 
-
+// Endpoint for generating speech
 // Endpoint for generating speech
 app.post('/generate-speech', async (req, res) => {
     const inputText = req.body.text;
@@ -32,9 +28,8 @@ app.post('/generate-speech', async (req, res) => {
     if (voice) {
         // Use the external API for the selected voice
         try {
-            const options = {
+            const response = await fetch('https://modelslab.com/api/v6/voice/text_to_audio', {
                 method: 'POST',
-                url: 'https://modelslab.com/api/v6/voice/text_to_audio',
                 headers: {
                     'Content-Type': 'application/json'
                 },
@@ -44,23 +39,22 @@ app.post('/generate-speech', async (req, res) => {
                     language: 'english',
                     track_id: voice
                 })
-            };
-
-            request(options, function (error, response) {
-                if (error) {
-                    console.error('Error reading story aloud:', error);
-                    return res.status(500).send({ error: 'Failed to generate speech with the external API' });
-                }
-
-                const data = JSON.parse(response);
-                if (data.links && data.links.length > 0) {
-                    const audioUrl = data.links[0];
-                    res.json({ audioUrl }); // Return the audio URL
-                } else {
-                    console.error('No audio link returned from the external API.');
-                    res.status(500).send({ error: 'Failed to generate speech with the external API' });
-                }
             });
+    
+            if (!response.ok) {
+                console.error('Error reading story aloud:', response.statusText);
+                return res.status(500).send({ error: 'Failed to generate speech with the external API' });
+            }
+    
+            const data = await response.json();
+            console.log(data);
+            if (data.links && data.links.length > 0) {
+                const audioUrl = data.links[0]; // Correctly access the audio link
+                res.json({ audioUrl }); // Return the audio URL
+            } else {
+                console.error('No audio link returned from the external API.');
+                res.status(500).send({ error: 'Failed to generate speech with the external API' });
+            }
         } catch (error) {
             console.error('Error generating speech with the external API:', error);
             res.status(500).send({ error: 'Failed to generate speech with the external API' });
@@ -110,47 +104,32 @@ app.get('/definition/:word', async (req, res) => {
     }
 });
 
-// Endpoint for generating a story using GPT-4 model and then generating an image
+
 app.post('/generate-story', async (req, res) => {
     const prompt = req.body.prompt;
     if (!prompt) {
         return res.status(400).send({ error: 'No prompt provided' });
     }
     try {
-        // Generate the story and image prompt
         const completion = await openai.chat.completions.create({
-            model: 'gpt-4o',
+            model: 'gpt-4',
             messages: [
                 { role: 'system', content: 'You are a helpful assistant designed to write short stories and suitable image prompts in plain text format: story|imagePrompt.'},
                 { role: 'user', content: prompt }
             ]
         });
 
-        const [story, imagePrompt] = completion.choices[0].message.content.split('|');
-
-        // Generate the image based on the image prompt
-        const imageResponse = await fetch('https://modelslab.com/api/v6/realtime/text2img', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                key: 'um2zbDtJUXa5R5zZuomCyHjVp4APcNUQL45PUKk6ro85aTTwk11XW1OUR9W0', // replace with your actual API key
-                prompt: "Randomly create digital art with characters",
-                negative_prompt: 'bad quality',
-                width: '512',
-                height: '512',
-                safety_checker: false,
-                seed: null,
-                samples: 1,
-                base64: false,
-                temp: true,
-                enhance_style: "digital-art"
-            })
+        const content = completion.choices[0].message.content.split('|');
+        let story = content;
+        let imagePrompt = story[0].substring(0, 1000);     
+        const imageResponse = await openai.images.generate({
+            model: "dall-e-3",
+            prompt: imagePrompt.trim(),
+            n: 1,
+            size: "1024x1024",
         });
 
-        const imageData = await imageResponse.json();
-        const imageUrl = imageData.output[0];
+        const imageUrl = imageResponse.data[0].url;
 
         res.json({ story, imageUrl });
     } catch (error) {

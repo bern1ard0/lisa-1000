@@ -1,4 +1,3 @@
-// Function to generate a story and an image with the server endpoint
 async function generateStory(prompt) {
     console.log('Contacting OpenAI server with prompt:', prompt); // Debugging code
 
@@ -16,7 +15,13 @@ async function generateStory(prompt) {
         }
 
         const data = await response.json();
-        console.log('Received story and image from server:', data); // Debugging code
+        console.log('Received story from server:', data.story); // Debugging code
+        console.log('Received image URL from server:', data.imageUrl); // Debugging code
+
+        // Use the generateDallEPrompt function with the received story
+        const dallEPrompt = generateDallEPrompt(data.story);
+        console.log('Generated DALL-E prompt:', dallEPrompt); // Debugging code
+
         return data;
     } catch (error) {
         console.error('Network or server error:', error);
@@ -24,10 +29,48 @@ async function generateStory(prompt) {
     }
 }
 
+// Function to generate a text DALL-E prompt from the story
+async function generateDallEPrompt(story) {
+    try {
+        if (!story || typeof story !== 'string') {
+            throw new Error('Invalid story input');
+        }
+
+        const response = await fetch('/generate-dalle-prompt', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ story: story })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        // Check if the response contains the expected structure
+        if (!data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
+            throw new Error('Invalid response format');
+        }
+
+        const prompt = data.choices[0].message.content;
+        console.log('Generated DALL-E prompt:', prompt); // Debugging code
+        return prompt;
+    } catch (error) {
+        console.error('Error generating DALL-E prompt:', error);
+        return ''; // Return an empty string in case of an error
+    }
+}
+
+
+
 document.addEventListener('DOMContentLoaded', function() {
     const takeMattersButton = document.getElementById('takeMattersButton');
     const buttonContainer = document.getElementById('button-container');
     const generateStoryButton = document.getElementById('generateStoryButton');
+    const generateMyStoryButton = document.getElementById('generateMyStoryButton');
     const randomStoryButton = document.getElementById('randomStoryButton');
     const fineTuneButton = document.getElementById('fineTuneButton');
     const generateFineTunedStoryButton = document.getElementById('generateFineTunedStoryButton');
@@ -49,31 +92,6 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedVoice = voiceDropdown.value;
         console.log(`Selected voice: ${selectedVoice}`);
     });
-
-    async function generateStory(prompt) {
-        console.log('Contacting OpenAI server with prompt:', prompt); // Debugging code
-
-        try {
-            const response = await fetch('/generate-story', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ prompt: prompt })
-            });
-
-            if (!response.ok) {
-                throw new Error(`Server error: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            console.log('Received story and image from server:', data); // Debugging code
-            return data;
-        } catch (error) {
-            console.error('Network or server error:', error);
-            return null;
-        }
-    }
 
     function displayStory(story, imageUrl, title = 'Generated Story') {
         if (!story) {
@@ -105,13 +123,10 @@ document.addEventListener('DOMContentLoaded', function() {
         generateStorySection.style.display = 'none';
     });
 
-    generateStoryButton.addEventListener('click', async function() {
+    generateStoryButton.addEventListener('click', function() {
         console.log('Generate Story button clicked'); // Debugging code
-        const storyData = await generateStory('Your story prompt here');
-        if (storyData) {
-            displayStory(storyData.story, storyData.imageUrl);
-            buttonContainer.style.display = 'flex';
-        }
+        takeMattersSection.style.display = 'none';
+        generateStorySection.style.display = 'block';
     });
 
     randomStoryButton.addEventListener('click', async function() {
@@ -120,7 +135,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const genreOptions = ["fantasy", "mystery", "adventure", "science fiction", "historical"];
         const randomLength = lengthOptions[Math.floor(Math.random() * lengthOptions.length)];
         const randomGenre = genreOptions[Math.floor(Math.random() * genreOptions.length)];
-        const storyData = await generateStory(`Write a ${randomLength} ${randomGenre} story suitable for language learning.`);
+        const storyData = await generateStory(`Write a ${randomLength} ${randomGenre} story suitable for language learning alongside a highly detailed relevant imagePrompt for DallE: Your text output is: story|imagePrompt`);
         if (storyData) {
             displayStory(storyData.story, storyData.imageUrl, `Generated ${randomGenre} Story`);
             buttonContainer.style.display = 'flex';
@@ -135,14 +150,19 @@ document.addEventListener('DOMContentLoaded', function() {
     generateFineTunedStoryButton.addEventListener('click', async function() {
         const genre = document.getElementById('genre').value;
         const length = document.getElementById('length').value;
-        const prompt = `Write a ${length} ${genre} story.`;
-        console.log(`Generating a story with genre: ${genre}, length: ${length}`); // Debugging code
+        const characterNum = document.getElementById('characterNum').value;
+        const emotion = document.getElementById('emotion').value;
+        const language = document.getElementById('language').value;
+    
+        const prompt = `Write a ${length} story with ${characterNum} characters (participants) in the ${language} language leaving you ${emotion} in the end. Alongside a highly detailed relevant imagePrompt for DallE: Your text output is: story|imagePrompt`;
+        console.log(`Generating a story with prompt: ${prompt}`); // Debugging code
         const storyData = await generateStory(prompt);
         if (storyData) {
             displayStory(storyData.story, storyData.imageUrl, `Generated ${genre} Story`);
             buttonContainer.style.display = 'flex';
         }
     });
+    
 
     generateStoryForm.addEventListener('submit', async function(event) {
         event.preventDefault();
@@ -157,7 +177,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const video = document.getElementById('video').checked;
         const subtitles = document.getElementById('subtitles').checked;
 
-        const prompt = `Title: ${title}, Theme: ${theme}, Input Language: ${inputLanguage}, Text: ${textInput}`;
+        const prompt = `Title: ${title}, Theme: ${theme}, Input Language: ${inputLanguage}, Text: ${textInput}, outputLanguage: ${outputLanguage}, Music: ${music}, alongside a highly detailed relevant imagePrompt for DallE: Your text output is: story|imagePrompt`;
         console.log(`Generating a story with prompt: ${prompt}`); // Debugging code
         const storyData = await generateStory(prompt);
         if (storyData) {

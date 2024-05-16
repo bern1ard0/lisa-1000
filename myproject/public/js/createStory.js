@@ -115,6 +115,8 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => {
             storyContainer.style.opacity = '1';
         }, 10); // Small timeout to trigger fade-in effect
+            // Ask reflective questions
+    askReflectiveQuestions();
     }
 
     takeMattersButton.addEventListener('click', function() {
@@ -236,22 +238,112 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-
-    // Function to translate the story
-    async function translateText(text, targetLanguage) {
-        try {
-            const response = await fetch('/translate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ text: text, targetLanguage: targetLanguage })
-            });
-            const data = await response.json();
-            return data.translatedText;
-        } catch (error) {
-            console.error('Error translating story:', error);
-            return text;
+// Function to fetch the definition of a word
+async function defineText(word) {
+    try {
+        const response = await fetch('/definition', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ word: word })
+        });
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.statusText}`);
         }
+        const data = await response.json();
+        return data.definition;
+    } catch (error) {
+        console.error('Error getting definition:', error);
+        return null;
     }
+}
+
+// Function to translate text
+async function translateText(text, targetLanguage) {
+    try {
+        const response = await fetch('/translate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text: text, targetLanguage: targetLanguage })
+        });
+        const data = await response.json();
+        return data.translatedText;
+    } catch (error) {
+        console.error('Error translating text:', error);
+        return null;
+    }
+}
+
+
+// Function to handle double-click event on text
+async function handleDoubleClick(event) {
+    const selectedText = window.getSelection().toString().trim();
+    if (selectedText) {
+        const definition = await defineText(selectedText);
+        const translationToggle = document.getElementById('translation-toggle').classList.contains('active');
+        let translation = '';
+        if (translationToggle) {
+            const targetLanguage = document.getElementById('nativeLanguage').value;
+            if (targetLanguage !== 'default') {
+                translation = await translateText(selectedText, targetLanguage);
+            }
+        }
+
+        const popupContent = `
+            <h2>Definition</h2>
+            <p>${definition}</p>
+            ${translation ? `<h2>Translation</h2><p>${translation}</p>` : ''}
+        `;
+        showPopup(popupContent);
+    }
+}
+// Function to show popup with content
+function showPopup(content) {
+    const popup = document.createElement('div');
+    popup.className = 'popup';
+    popup.innerHTML = `
+        <div class="popup-content">
+            <span class="close-btn">&times;</span>
+            ${content}
+        </div>
+    `;
+    document.body.appendChild(popup);
+
+    const closeButton = popup.querySelector('.close-btn');
+    closeButton.addEventListener('click', () => {
+        popup.remove();
+    });
+}
+// Event listener for double-click on story content
+document.addEventListener('dblclick', handleDoubleClick);
+
+// Event listener for translation toggle
+document.getElementById('translation-toggle').addEventListener('click', function() {
+    this.classList.toggle('active');
+    console.log('Translation toggle:', this.classList.contains('active'));
+});
+function askReflectiveQuestions() {
+    const questions = [
+        'What did you learn from the story?',
+        'How did the story make you feel?',
+        'Can you relate any part of the story to your own life?',
+        'What was your favorite part of the story and why?',
+        'If you could change one thing in the story, what would it be?',
+        'How does this help in your language learning goals?'
+    ];
+
+    const questionContainer = document.createElement('div');
+    questionContainer.className = 'question-container';
+
+    questions.forEach(question => {
+        const questionElement = document.createElement('p');
+        questionElement.textContent = question;
+        questionContainer.appendChild(questionElement);
+    });
+
+    storyContainer.appendChild(questionContainer);
+}
 });

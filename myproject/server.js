@@ -14,8 +14,58 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 
 
+// Endpoint for generating definitions using OpenAI
+app.post('/definition', async (req, res) => {
+    const { word } = req.body;
 
-// Endpoint for generating speech
+    if (!word) {
+        return res.status(400).send({ error: 'No word provided' });
+    }
+
+    try {
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4',
+            messages: [
+                { role: 'system', content: 'You are a Dictionary that provides definitions for words in a simple and clear manner plus example use case. You return In Dictionary Format (DEFine, next line, Example).' },
+                { role: 'user', content: `Define the word "${word}".` }
+            ]
+        });
+
+        const definition = completion.choices[0].message.content.trim();
+        res.json({ definition });
+    } catch (error) {
+        console.error('Error getting definition:', error);
+        res.status(500).json({ error: 'Failed to get definition' });
+    }
+});
+
+
+// Endpoint for translating text
+app.post('/translate', async (req, res) => {
+    const { text, targetLanguage } = req.body;
+
+    if (!text || !targetLanguage) {
+        return res.status(400).send({ error: 'Text or target language not provided' });
+    }
+
+    try {
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4',
+            messages: [
+                { role: 'system', content: 'You are a helpful assistant that translates text.' },
+                { role: 'user', content: `Translate the following text to ${targetLanguage}: ${text}` }
+            ]
+        });
+
+        const translatedText = completion.choices[0].message.content.trim();
+        res.json({ translatedText });
+    } catch (error) {
+        console.error('Error translating text:', error);
+        res.status(500).json({ error: 'Failed to translate text' });
+    }
+});
+
+
 // Endpoint for generating speech
 app.post('/generate-speech', async (req, res) => {
     const inputText = req.body.text;

@@ -277,29 +277,31 @@ async function translateText(text, targetLanguage) {
     }
 }
 
-
 // Function to handle double-click event on text
-async function handleDoubleClick(event) {
+async function handleDoubleClick() {
     const selectedText = window.getSelection().toString().trim();
     if (selectedText) {
-        const definition = await defineText(selectedText);
         const translationToggle = document.getElementById('translation-toggle').classList.contains('active');
-        let translation = '';
         if (translationToggle) {
             const targetLanguage = document.getElementById('nativeLanguage').value;
             if (targetLanguage !== 'default') {
-                translation = await translateText(selectedText, targetLanguage);
+                const translation = await translateText(selectedText, targetLanguage);
+                if (translation) {
+                    showTranslation(selectedText, translation);
+                }
+            }
+        } else {
+            const definition = await defineText(selectedText);
+            if (definition) {
+                showPopup(`
+                    <h2>Definition</h2>
+                    <p>${definition}</p>
+                `);
             }
         }
-
-        const popupContent = `
-            <h2>Definition</h2>
-            <p>${definition}</p>
-            ${translation ? `<h2>Translation</h2><p>${translation}</p>` : ''}
-        `;
-        showPopup(popupContent);
     }
 }
+
 // Function to show popup with content
 function showPopup(content) {
     const popup = document.createElement('div');
@@ -317,6 +319,36 @@ function showPopup(content) {
         popup.remove();
     });
 }
+
+// Function to show translation above the selected text
+function showTranslation(selectedText, translation) {
+    const range = window.getSelection().getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    const tooltip = document.createElement('div');
+    tooltip.className = 'translation-tooltip';
+    tooltip.innerText = translation;
+    document.body.appendChild(tooltip);
+
+    tooltip.style.left = `${rect.left + window.scrollX}px`;
+    tooltip.style.top = `${rect.top + window.scrollY - tooltip.offsetHeight}px`;
+
+    setTimeout(() => {
+        tooltip.remove();
+    }, 3000);
+}
+
+// Function to translate the entire story
+async function translateStory() {
+    const storyContent = document.getElementById('story-content').textContent;
+    const targetLanguage = document.getElementById('nativeLanguage').value;
+    if (targetLanguage !== 'default') {
+        const translatedStory = await translateText(storyContent, targetLanguage);
+        if (translatedStory) {
+            document.getElementById('story-content').textContent = translatedStory;
+        }
+    }
+}
+
 // Event listener for double-click on story content
 document.addEventListener('dblclick', handleDoubleClick);
 
@@ -325,6 +357,10 @@ document.getElementById('translation-toggle').addEventListener('click', function
     this.classList.toggle('active');
     console.log('Translation toggle:', this.classList.contains('active'));
 });
+
+// Event listener for translate button
+translateButton.addEventListener('click', translateStory);
+
 function askReflectiveQuestions() {
     const questions = [
         'What did you learn from the story?',

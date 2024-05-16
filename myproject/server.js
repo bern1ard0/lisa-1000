@@ -26,7 +26,7 @@ app.post('/definition', async (req, res) => {
         const completion = await openai.chat.completions.create({
             model: 'gpt-4',
             messages: [
-                { role: 'system', content: 'You are a Dictionary that provides definitions for words in a simple and clear manner plus example use case. You return In Dictionary Format (DEFine, next line, Example).' },
+                { role: 'system', content: 'You are a Dictionary that provides definitions for words in a simple and clear manner plus example use case. You return In Dictionary Format.' },
                 { role: 'user', content: `Define the word "${word}".` }
             ]
         });

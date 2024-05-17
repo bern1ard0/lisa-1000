@@ -176,7 +176,7 @@ app.post('/generate-story', async (req, res) => {
             model: "dall-e-3",
             prompt: imagePrompt.trim(),
             n: 1,
-            size: "1024x1024",
+            size: "1792x1024",
         });
 
         const imageUrl = imageResponse.data[0].url;

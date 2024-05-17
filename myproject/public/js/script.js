@@ -207,8 +207,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // Get the transcript of the recognized speech
             const transcript = event.results[0][0].transcript;
 
-            // Display an alert with the transcript
-            displayAlert('You said:', transcript);
+            // Display the transcript in a modal window
+            displayModal('You said:', transcript);
         };
 
         // Start speech recognition when the "Narrate" button is clicked
@@ -218,9 +218,129 @@ document.addEventListener('DOMContentLoaded', function() {
     } else {
         console.error('Speech recognition not supported in this browser.');
     }
-});
 
-// Function to display an alert with a message and transcript
+    // Function to display the modal with the transcript and play functionality
+    function displayModal(title, transcript) {
+        // Create the modal elements
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <span class="close-btn">&times;</span>
+                <h2>${title}</h2>
+                <p id="transcript">${transcript}</p>
+                <button id="playButton">Play Synthesis</button>
+                <button id="recordButton">Record Your Voice</button>
+                <button id="playRecordingButton" style="display:none;">Play Recording</button>
+                <audio id="audioPlayback" controls style="display:none;"></audio>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        // Show the modal
+        modal.style.display = 'block';
+
+        // Get the close button and add click event to close the modal
+        const closeButton = modal.querySelector('.close-btn');
+        closeButton.addEventListener('click', () => {
+            modal.style.display = 'none';
+            modal.remove();
+        });
+
+        // Add click event to the play button to read the transcript aloud
+        const playButton = modal.querySelector('#playButton');
+        playButton.addEventListener('click', () => {
+            readTextAloud(transcript);
+        });
+
+        // Audio recording functionality
+        const recordButton = modal.querySelector('#recordButton');
+        const playRecordingButton = modal.querySelector('#playRecordingButton');
+        const audioPlayback = modal.querySelector('#audioPlayback');
+        let mediaRecorder;
+        let audioChunks = [];
+
+        recordButton.addEventListener('click', async () => {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.start();
+
+                    recordButton.textContent = 'Stop Recording';
+                    recordButton.removeEventListener('click', startRecording);
+                    recordButton.addEventListener('click', stopRecording);
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        audioPlayback.src = audioUrl;
+                        audioPlayback.style.display = 'block';
+                        playRecordingButton.style.display = 'inline-block';
+                    };
+                } catch (error) {
+                    console.error('Error accessing microphone:', error);
+                }
+            } else {
+                console.error('MediaDevices.getUserMedia not supported in this browser.');
+            }
+        });
+
+        function startRecording() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(stream => {
+                        mediaRecorder = new MediaRecorder(stream);
+                        mediaRecorder.start();
+
+                        recordButton.textContent = 'Stop Recording';
+                        recordButton.removeEventListener('click', startRecording);
+                        recordButton.addEventListener('click', stopRecording);
+
+                        mediaRecorder.ondataavailable = (event) => {
+                            audioChunks.push(event.data);
+                        };
+
+                        mediaRecorder.onstop = () => {
+                            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                            const audioUrl = URL.createObjectURL(audioBlob);
+                            audioPlayback.src = audioUrl;
+                            audioPlayback.style.display = 'block';
+                            playRecordingButton.style.display = 'inline-block';
+                        };
+                    })
+                    .catch(error => {
+                        console.error('Error accessing microphone:', error);
+                    });
+            } else {
+                console.error('MediaDevices.getUserMedia not supported in this browser.');
+            }
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            recordButton.textContent = 'Record Your Voice';
+            recordButton.removeEventListener('click', stopRecording);
+            recordButton.addEventListener('click', startRecording);
+        }
+
+        playRecordingButton.addEventListener('click', () => {
+            audioPlayback.play();
+        });
+
+        recordButton.addEventListener('click', startRecording);
+    }
+
+    // Function to read text aloud
+    function readTextAloud(text) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        window.speechSynthesis.speak(utterance);
+    }
+});// Function to display an alert with a message and transcript
 function displayAlert(message, transcript) {
     alert(`${message} ${transcript}`);
 }

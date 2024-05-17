@@ -186,33 +186,43 @@ async function getDefinitionAndPlayAudio(word) {
 
     displayAlert(`Definition of ${word}`, definition);
 }
-// Check if the browser supports SpeechRecognition
-if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
-    // Use the webkit prefix if needed
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+document.addEventListener('DOMContentLoaded', function() {
+    const narrateButton = document.getElementById('narrateButton');
+    
+    // Check if the browser supports SpeechRecognition
+    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+        // Use the webkit prefix if needed
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
 
-    const recognition = new SpeechRecognition();
+        recognition.onstart = function() {
+            console.log('Speech recognition started');
+        };
 
-    recognition.onstart = function() {
-        console.log('Speech recognition started');
-    };
+        recognition.onerror = function(event) {
+            console.error('Speech recognition error:', event.error);
+        };
 
-    recognition.onerror = function(event) {
-        console.error('Speech recognition error:', event.error);
-    };
+        recognition.onresult = function(event) {
+            // Get the transcript of the recognized speech
+            const transcript = event.results[0][0].transcript;
 
-    recognition.onresult = function(event) {
-        // Get the transcript of the recognized speech
-        const transcript = event.results[0][0].transcript;
+            // Display an alert with the transcript
+            displayAlert('You said:', transcript);
+        };
 
-        // Display an alert with the transcript
-        displayAlert('You said:', transcript);
-    };
+        // Start speech recognition when the "Narrate" button is clicked
+        narrateButton.addEventListener('click', function() {
+            recognition.start();
+        });
+    } else {
+        console.error('Speech recognition not supported in this browser.');
+    }
+});
 
-    // Start the speech recognition
-    recognition.start();
-} else {
-    console.error('Your browser does not support SpeechRecognition');
+// Function to display an alert with a message and transcript
+function displayAlert(message, transcript) {
+    alert(`${message} ${transcript}`);
 }
 
 

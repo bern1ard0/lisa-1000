@@ -10,6 +10,7 @@ app.use(cors()); // Enable CORS for all routes
 const PORT = process.env.PORT || 3000;
 app.use(express.static('public'));
 
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 

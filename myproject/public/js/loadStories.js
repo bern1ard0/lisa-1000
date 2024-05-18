@@ -14,6 +14,18 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error loading the stories:', error);
         });
 });
+document.addEventListener('DOMContentLoaded', function() {
+    const currentPage = window.location.pathname.split('/').pop();
+    const navLinks = document.querySelectorAll('.nav-container nav ul li a');
+
+    navLinks.forEach(link => {
+        const linkPage = link.getAttribute('href').split('/').pop();
+        if (linkPage === currentPage) {
+            link.classList.add('current-page');
+        }
+    });
+});
+
 // Function to fetch the definition of a word
 async function defineText(word) {
     try {

@@ -6,17 +6,17 @@
     --text-primary: #0D47A1;
     --text-secondary: #1976D2;
     --accent-color: skyblue;
-    --header-background: #1976D2;
+    --header-background: #4841b1;
     --header-text-color: #FFFFFF;
 }
 
 body {
-    font-family: 'Arial', sans-serif;
+    font-family: 'cursive', sans-serif;
     margin: 0;
     padding: 0;
     background-color: var(--bg-color-main);
     color: var(--text-primary);
-    line-height: 1.6;
+    line-height: 1.8;
     font-size: 18px;
 }
 
@@ -28,9 +28,16 @@ header {
     background-color: var(--header-background);
     color: var(--header-text-color);
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    font-family: 'Pacifico', cursive;
+}
+
+/* Applying cursive font to specific elements */
+h1, h2, h3 {
+    font-family: 'Pacifico', cursive;
 }
 /* Modal styles */
 .modal {
+    line-height: 20 px;
     display: none;
     position: fixed;
     z-index: 1000;
@@ -67,6 +74,9 @@ header {
     color: #000;
     text-decoration: none;
     cursor: pointer;
+}
+.current-page {
+    color: purple;
 }
 
 
@@ -118,13 +128,14 @@ audio {
 
 .nav-container nav ul li a {
     text-decoration: none;
-    font-size: 16px;
+    font-size: 20px;
     color: var(--header-text-color);
     transition: color 0.3s ease;
+    font-family: 'Pacifico', cursive;
 }
 
 .nav-container nav ul li a:hover {
-    color: var(--accent-color);
+    color: rgb(136, 29, 136);
     text-decoration: none;
 }
 
@@ -149,12 +160,13 @@ audio {
     display: flex;
     justify-content: center;
     padding: 20px 0;
+    font-family: 'Pacifico', cursive;
 }
 
 .title-container h1 {
     margin: 0;
-    font-family: cursive;
     font-size: 75px;
+    font-family: 'Pacifico', cursive;
 }
 
 .hidden {
@@ -168,20 +180,20 @@ audio {
     line-height: 40px;
     text-align: center;
     border-radius: 50%;
-    background-color: var(--accent-color);
-    color: var(--header-text-color);
+    background-color: var(--bg-color-main);
+    color: var(--header-background);
     font-weight: bold;
     cursor: pointer;
     transition: background-color 0.3s, color 0.3s;
 }
 
 .translation-toggle:hover {
-    background-color: var(--border-color);
+    background-color: rgb(63, 18, 146);
     color: white;
 }
 
 .translation-toggle.active {
-    background-color: var(--border-color);
+    background-color: rgb(63, 18, 146);
     color: white;
 }
 
@@ -200,10 +212,11 @@ main {
 }
 
 #story-container {
-    background-color: var(--bg-color-story);
-    color: var(--header-text-color);
+    font-size: 25px;
+    background-color: skyblue;
+    color: rgb(55, 7, 143);
     padding: 20px;
-    border-radius: 10px;
+    border-radius: 20px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     max-width: 800px;
     margin-top: 20px;
@@ -353,19 +366,19 @@ select:focus, input:focus, textarea:focus {
 
 .us, .fr, .de, .es, .cn, .ar {
     display: inline-block;
-    height: 50px;
-    width: 62px;
+    height: 75px;
+    width: 90px;
     background-size: cover;
     vertical-align: middle;
     margin: 5px;
 }
 
-.us { background-image: url('/myproject/public/images/united-states-flag-animation.gif'); }
-.fr { background-image: url('/myproject/public/images/france-flag-animation.gif'); }
-.de { background-image: url('/myproject/public/images/germany-flag-animation.gif'); }
-.es { background-image: url('/myproject/public/images/spain-flag-animation.gif'); }
-.cn { background-image: url('/myproject/public/images/china-flag-animation.gif'); }
-.ar { background-image: url('/myproject/public/images/saudi-arabia-flag-animation.gif'); }
+.us { background-image: url('https://lh3.googleusercontent.com/-9BEUs3L9gVE/VhE40dddysI/AAAAAAAAkm0/YIls2k0h79w/s1600/united-states-flag-animation.gif'); }
+.fr { background-image: url('https://lh3.googleusercontent.com/-Ym4VD8myqUM/VhEyjRvvWOI/AAAAAAAAjaw/zTPj6-jD9gw/s1600/france-flag-animation.gif'); }
+.de { background-image: url('https://lh3.googleusercontent.com/-oPzOMIOg4mw/VhEyxoushSI/AAAAAAAAjdw/rxNagrCV45k/s1600/germany-flag-animation.gif'); }
+.es { background-image: url('https://lh3.googleusercontent.com/-W24Nmtyp4sY/VhE3ut8oUdI/AAAAAAAAkZU/04Vp7Z0AEyE/s1600/spain-flag-animation.gifg'); }
+.cn { background-image: url('https://lh3.googleusercontent.com/-zFu9YOux_0o/VhExb8_8E8I/AAAAAAAAjLQ/Us7zTFAku-Q/s1600/china-flag-animation.gif'); }
+.ar { background-image: url('https://lh3.googleusercontent.com/-0TIKrIkN5gY/VhE3K3hn3FI/AAAAAAAAkSU/31JBLnPNr_E/s1600/saudi-arabia-flag-animation.gif'); }
 
 
 @keyframes fadeIn {

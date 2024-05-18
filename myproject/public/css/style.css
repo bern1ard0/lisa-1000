@@ -384,7 +384,7 @@ select:focus, input:focus, textarea:focus {
     height: 75px;
     width: 90px;
     background-size: cover;
-    vertical-align: middle
+    vertical-align: middle;
     margin: 5px;
     font-style: italic;
 }

@@ -128,7 +128,7 @@ app.post('/generate-story', async (req, res) => {
         const completion = await openai.chat.completions.create({
             model: 'gpt-4',
             messages: [
-                { role: 'system', content: 'You are a helpful assistant designed to write short stories and suitable image prompts in plain text format: story|imagePrompt.'},
+                { role: 'system', content: 'You are a helpful assistant designed to write short stories and suitable image prompts in plain text format: story|imagePrompt. Always Perform a 90 degree rotation of the image.'},
                 { role: 'user', content: prompt }
             ]
         });

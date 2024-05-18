@@ -100,11 +100,6 @@ async function generateDallEPrompt(story) {
     }
 }
 
-
-
-
-
-
 document.addEventListener('DOMContentLoaded', function() {
     const takeMattersButton = document.getElementById('takeMattersButton');
     const buttonContainer = document.getElementById('button-container');
@@ -152,8 +147,6 @@ document.addEventListener('DOMContentLoaded', function() {
         setTimeout(() => {
             storyContainer.style.opacity = '1';
         }, 10); // Small timeout to trigger fade-in effect
-            // Ask reflective questions
-    askReflectiveQuestions();
     }
 
     takeMattersButton.addEventListener('click', function() {
@@ -238,7 +231,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (targetLanguage && targetLanguage !== 'default') {
             const translatedStory = await translateText(storyText, targetLanguage);
             if (translatedStory) {
-                displayStory(translatedStory, "Translated Story");
+                const currentImageURL = document.querySelector('.generated-image').src;
+                const currentTitle = document.querySelector('#c-story-container h2').textContent;
+                displayStory(translatedStory, currentImageURL, currentTitle);
             }
         }
     });
@@ -440,6 +435,4 @@ document.getElementById('translation-toggle').addEventListener('click', function
     console.log('Translation toggle:', this.classList.contains('active'));
 });
 
-// Event listener for translate button
-translateButton.addEventListener('click', translateStory);
 });

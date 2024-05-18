@@ -102,10 +102,10 @@ To get started with Lisa 1000, follow these steps:
 
 ## Course Project Reflection
 
-### Expansive Design (Design Justice)
+### Expansive Design
 
-- **Inclusivity**: Designed for users from varied backgrounds to experience AI-driven immersive language learning.
 - **Intuitive Navigation**: Use of icons to make navigation more user-friendly.
+- **Global Outreach**: Designed for users from varied backgrounds to experience AI-driven immersive language learning.
 - **Immersive Experience**: Incorporates audio-visual elements for enhanced learning and entertainment.
 
 ## Contributing
@@ -142,3 +142,18 @@ To see Lisa 1000 in action, check out our demo video:
 [![Lisa 1000 Demo](https://img.youtube.com/vi/YOUR_VIDEO_ID/0.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
 
 Replace `YOUR_VIDEO_ID` with the actual YouTube video ID of your demo. If the video is hosted on another platform, replace the link accordingly.
+![alt text](image.png)
+![alt text](image-1.png)
+![alt text](image-2.png)
+![alt text](image-3.png)
+![alt text](image-5.png)
+![alt text](image-6.png)
+![alt text](image-7.png)
+![alt text](image-8.png)
+![alt text](image-9.png)
+![alt text](image-10.png)
+![alt text](image-11.png)
+![alt text](image-12.png)
+![alt text](image-13.png)
+![alt text](image-14.png)
+![alt text](image-15.png)

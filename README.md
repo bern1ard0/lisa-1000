@@ -83,7 +83,7 @@ To get started with Lisa 1000, follow these steps:
 
 - **Speech-to-Text Synthesis**: Convert spoken words into text using speech recognition.
 - **Word Definitions**: Double-click on any word to get its definition.
-- **Translation Toggle**: Activate translation mode to translate selected text.
+- **Translation Toggle**: Activate translation mode to translate selected text or story.
 ## Technologies
 
 - **Frontend**:

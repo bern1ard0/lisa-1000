@@ -85,6 +85,29 @@ function cycleText() {
 
 window.onload = cycleText;
 
+// Function to read the story aloud
+async function readStoryAloud(text, voice) {
+    try {
+        const response = await fetch('/generate-speech', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text: text, voice: voice }) // Pass the voice to the server
+        });
+
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const audio = new Audio(url);
+            audio.play();
+        } else {
+            throw new Error('Network response was not ok.');
+        }
+    } catch (error) {
+        console.error('Error reading story aloud:', error);
+    }
+}
 
 
 document.getElementById('readButton').addEventListener('click', function() {
@@ -95,23 +118,14 @@ document.getElementById('readButton').addEventListener('click', function() {
     // Combine the title and content with a separator
     const text = title + ". " + content; // Add a period and space to separate title and content
 
-    fetch('/generate-speech', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ text: text }) // Send the text to the server
-    })
-    .then(response => {
-        if (response.ok) return response.blob(); // Get the audio blob if response is OK
-        throw new Error('Network response was not ok.');
-    })
-    .then(blob => {
-        const url = URL.createObjectURL(blob); // Create a URL for the blob
-        const audio = new Audio(url); // Create an audio element
-        audio.play(); // Play the audio
-    })
-    .catch(error => console.error('Error playing the story:', error));
+    // Get the selected voice
+    const selectedVoice = document.getElementById('voiceDropdown').value;
+    
+    if (selectedVoice) {
+        readStoryAloud(text, selectedVoice);
+    } else {
+        console.log('No voice selected.');
+    }
 });
 
 
@@ -241,6 +255,14 @@ document.addEventListener('dblclick', handleDoubleClick);
 document.addEventListener('DOMContentLoaded', function() {
     const nativeLanguage = document.getElementById('nativeLanguage');
     const otherLanguageInput = document.getElementById('otherLanguage');
+    const voiceDropdown = document.getElementById('voiceDropdown');
+
+    let selectedVoice = '';
+
+    voiceDropdown.addEventListener('change', function() {
+        selectedVoice = voiceDropdown.value;
+        console.log(`Selected voice: ${selectedVoice}`);
+    });
 
     nativeLanguage.addEventListener('change', function() {
         if (this.value === 'other') {

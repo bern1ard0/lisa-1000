@@ -5,8 +5,8 @@
     --border-color: #0277BD;
     --text-primary: #0D47A1;
     --text-secondary: #1976D2;
-    --accent-color: #00BCD4;
-    --header-background: #00796B;
+    --accent-color: skyblue;
+    --header-background: #1976D2;
     --header-text-color: #FFFFFF;
 }
 
@@ -68,6 +68,7 @@ header {
     text-decoration: none;
     cursor: pointer;
 }
+
 
 button {
     padding: 10px 20px;
@@ -241,6 +242,18 @@ button:hover {
     height: 20px;
     margin-right: 5px;
 }
+
+div p {
+    font-size: 1.2em;
+    line-height: 1;
+    color: var(--text-primary);
+    margin: 20px 0;
+    padding: 20px;
+    background-color: var(--bg-color-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
 
 aside {
     background-color: var(--bg-color-secondary);

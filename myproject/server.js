@@ -68,68 +68,31 @@ app.post('/translate', async (req, res) => {
 
 // Endpoint for generating speech
 app.post('/generate-speech', async (req, res) => {
-    const inputText = req.body.text;
-    const voice = req.body.voice; // Get the voice from the request body
+    const { text, voice } = req.body; // Destructure the voice from the request body
 
-    if (!inputText) {
+    if (!text) {
         return res.status(400).send({ error: 'No text provided' });
     }
 
-    if (voice) {
-        // Use the external API for the selected voice
-        try {
-            const response = await fetch('https://modelslab.com/api/v6/voice/text_to_audio', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    key: 'um2zbDtJUXa5R5zZuomCyHjVp4APcNUQL45PUKk6ro85aTTwk11XW1OUR9W0', // replace with your actual API key
-                    prompt: inputText,
-                    language: 'english',
-                    track_id: voice
-                })
-            });
-    
-            if (!response.ok) {
-                console.error('Error reading story aloud:', response.statusText);
-                return res.status(500).send({ error: 'Failed to generate speech with the external API' });
-            }
-    
-            const data = await response.json();
-            console.log(data);
-            if (data.links && data.links.length > 0) {
-                const audioUrl = data.links[0]; // Correctly access the audio link
-                res.json({ audioUrl }); // Return the audio URL
-            } else {
-                console.error('No audio link returned from the external API.');
-                res.status(500).send({ error: 'Failed to generate speech with the external API' });
-            }
-        } catch (error) {
-            console.error('Error generating speech with the external API:', error);
-            res.status(500).send({ error: 'Failed to generate speech with the external API' });
-        }
-    } else {
-        // Use OpenAI TTS as default
-        try {
-            const mp3 = await openai.audio.speech.create({
-                model: "tts-1",
-                voice: "nova",
-                input: inputText,
-            });
+    try {
+        const mp3 = await openai.audio.speech.create({
+            model: "tts-1",
+            voice: voice, // Use the specified voice
+            input: text,
+        });
 
-            const buffer = Buffer.from(await mp3.arrayBuffer());
-            res.writeHead(200, {
-                'Content-Type': 'audio/mpeg',
-                'Content-Length': buffer.length
-            });
-            res.end(buffer);
-        } catch (error) {
-            console.error('Error generating speech with OpenAI:', error);
-            res.status(500).send({ error: 'Failed to generate speech with OpenAI' });
-        }
+        const buffer = Buffer.from(await mp3.arrayBuffer());
+        res.writeHead(200, {
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': buffer.length
+        });
+        res.end(buffer);
+    } catch (error) {
+        console.error('Error generating speech with OpenAI:', error);
+        res.status(500).send({ error: 'Failed to generate speech with OpenAI' });
     }
 });
+
 
 
 // Endpoint for generating definitions using OpenAI

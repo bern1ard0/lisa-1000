@@ -64,7 +64,18 @@ async function generateDallEPrompt(story) {
     }
 }
 
+document.addEventListener('DOMContentLoaded', function() {
+    const nativeLanguage = document.getElementById('nativeLanguage');
+    const otherLanguageInput = document.getElementById('otherLanguage');
 
+    nativeLanguage.addEventListener('change', function() {
+        if (this.value === 'other') {
+            otherLanguageInput.classList.remove('hidden');
+        } else {
+            otherLanguageInput.classList.add('hidden');
+        }
+    });
+});
 
 document.addEventListener('DOMContentLoaded', function() {
     const takeMattersButton = document.getElementById('takeMattersButton');
@@ -192,15 +203,20 @@ document.addEventListener('DOMContentLoaded', function() {
         const storyText = document.getElementById('story-content').textContent;
         readStoryAloud(storyText, selectedVoice);
     });
-
     translateButton.addEventListener('click', async function() {
         const storyText = document.getElementById('story-content').textContent;
-        const selectedLanguage = document.getElementById('nativeLanguage').value;
-        if (selectedLanguage !== 'I speak...') {
-            const translatedStory = await translateText(storyText, selectedLanguage);
-            displayStory(translatedStory, storyData.imageUrl, "Translated Story");
+        let targetLanguage = document.getElementById('nativeLanguage').value;
+        if (targetLanguage === 'other') {
+            targetLanguage = document.getElementById('otherLanguage').value.trim();
+        }
+        if (targetLanguage && targetLanguage !== 'default') {
+            const translatedStory = await translateText(storyText, targetLanguage);
+            if (translatedStory) {
+                displayStory(translatedStory, "Translated Story");
+            }
         }
     });
+    
 
     animateButton.addEventListener('click', function() {
         console.log('Animate button clicked'); // Debugging code
@@ -237,6 +253,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error reading story aloud:', error);
         }
     }
+    
 // Function to generate speech for the text
 async function readTextAloud(text) {
     try {

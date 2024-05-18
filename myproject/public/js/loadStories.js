@@ -152,13 +152,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const otherLanguageInput = document.getElementById('otherLanguage');
 
     nativeLanguage.addEventListener('change', function() {
-        if (this.value === 'other') {
+        const selectedLanguage = this.value;
+        console.log(`Selected language: ${selectedLanguage}`);
+
+        if (selectedLanguage === 'other') {
             otherLanguageInput.classList.remove('hidden');
+            otherLanguageInput.focus(); // Focus on the input field for other language
         } else {
             otherLanguageInput.classList.add('hidden');
         }
     });
 });
+
 // Event listener for translation toggle
 document.getElementById('translation-toggle').addEventListener('click', function() {
     this.classList.toggle('active');

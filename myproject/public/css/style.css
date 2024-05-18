@@ -1,12 +1,12 @@
 :root {
     --bg-color-main: #F7F9FB;
     --bg-color-secondary: #E0F7FA;
-    --bg-color-story: #0288D1;
+    --bg-color-story: #9658e6;
     --border-color: #0277BD;
     --text-primary: #0D47A1;
     --text-secondary: #1976D2;
-    --accent-color: skyblue;
-    --header-background: #4841b1;
+    --accent-color: #5851bd;
+    --header-background: #5851bd;
     --header-text-color: #FFFFFF;
 }
 
@@ -81,8 +81,9 @@ h1, h2, h3 {
 
 
 button {
+    font-family: 'Pacifico', cursive;
     padding: 10px 20px;
-    font-size: 16px;
+    font-size: 20px;
     cursor: pointer;
     background-color: var(--accent-color);
     color: white;
@@ -135,7 +136,7 @@ audio {
 }
 
 .nav-container nav ul li a:hover {
-    color: rgb(136, 29, 136);
+    color: rgb(190, 65, 190);
     text-decoration: none;
 }
 
@@ -188,12 +189,12 @@ audio {
 }
 
 .translation-toggle:hover {
-    background-color: rgb(63, 18, 146);
+    background-color:rgb(190, 65, 190);
     color: white;
 }
 
 .translation-toggle.active {
-    background-color: rgb(63, 18, 146);
+    background-color: rgb(190, 65, 190);
     color: white;
 }
 
@@ -211,21 +212,35 @@ main {
     text-align: center;
 }
 
+#story-content {
+    font-family: 'Dancing Script', cursive;
+    font-size: 24px; /* Increase the font size */
+    line-height: 1.6; /* Increase line spacing */
+    color: #004d80; /* Adjust text color for better contrast */
+    font-weight: 600; /* Make the font bolder, if supported */
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2); /* Add subtle text shadow */
+    padding: 20px; /* Add padding around the text for better spacing */
+    background-color: rgba(255, 255, 255, 0.8); /* Lighten the background color for better contrast */
+    border-radius: 10px; /* Add border-radius for a softer look */
+    max-width: 800px; /* Optional: limit the max width for better readability */
+    margin: 0 auto; /* Center the text block */
+}
+
 #story-container {
     font-size: 25px;
-    background-color: skyblue;
+    background-color: aliceblue;
     color: rgb(55, 7, 143);
     padding: 20px;
     border-radius: 20px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     max-width: 800px;
     margin-top: 20px;
-    line-height: 1.8;
+    line-height: 2.0;
 }
 
 #story-title {
     text-align: center;
-    color: var(--header-text-color);
+    color: var(--border-color);
 }
 
 #button-container {
@@ -369,8 +384,9 @@ select:focus, input:focus, textarea:focus {
     height: 75px;
     width: 90px;
     background-size: cover;
-    vertical-align: middle;
+    vertical-align: middle
     margin: 5px;
+    font-style: italic;
 }
 
 .us { background-image: url('https://lh3.googleusercontent.com/-9BEUs3L9gVE/VhE40dddysI/AAAAAAAAkm0/YIls2k0h79w/s1600/united-states-flag-animation.gif'); }

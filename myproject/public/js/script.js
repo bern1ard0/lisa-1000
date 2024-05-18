@@ -247,15 +247,24 @@ function showTranslation(selectedText, translation) {
 
 // Function to translate the entire story
 async function translateStory() {
-    const storyContent = document.getElementById('story-content').textContent;
+    const translationToggle = document.getElementById('translation-toggle').classList.contains('active');
+    if (!translationToggle) {
+        console.log('Translation toggle is not active. Translation not triggered.');
+        return;
+    }
+
+    const storyContentElement = document.getElementById('story-content');
+    const storyText = storyContentElement.textContent;
     let targetLanguage = document.getElementById('nativeLanguage').value;
+
     if (targetLanguage === 'other') {
         targetLanguage = document.getElementById('otherLanguage').value.trim();
     }
+
     if (targetLanguage && targetLanguage !== 'default') {
-        const translatedStory = await translateText(storyContent, targetLanguage);
+        const translatedStory = await translateText(storyText, targetLanguage);
         if (translatedStory) {
-            document.getElementById('story-content').textContent = translatedStory;
+            storyContentElement.textContent = translatedStory;  // Update only the text content
         }
     }
 }
@@ -269,21 +278,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const otherLanguageInput = document.getElementById('otherLanguage');
     const voiceDropdown = document.getElementById('voiceDropdown');
 
-    let selectedVoice = '';
-
-    voiceDropdown.addEventListener('change', function() {
-        selectedVoice = voiceDropdown.value;
-        console.log(`Selected voice: ${selectedVoice}`);
-    });
-
+    // Handle language selection
     nativeLanguage.addEventListener('change', function() {
-        if (this.value === 'other') {
+        const selectedLanguage = this.value;
+        console.log(`Selected language: ${selectedLanguage}`);
+
+        if (selectedLanguage === 'other') {
             otherLanguageInput.classList.remove('hidden');
+            otherLanguageInput.focus(); // Focus on the input field for other language
         } else {
             otherLanguageInput.classList.add('hidden');
         }
     });
+
+    // Handle voice selection
+    voiceDropdown.addEventListener('change', function() {
+        const selectedVoice = this.value;
+        console.log(`Selected voice: ${selectedVoice}`);
+    });
 });
+
+
 // Event listener for translation toggle
 document.getElementById('translation-toggle').addEventListener('click', function() {
     this.classList.toggle('active');

@@ -1,3 +1,39 @@
+function languageName(lang, otherLanguage) {
+    switch (lang) {
+        case 'fr': return 'French';
+        case 'de': return 'German';
+        case 'zh': return 'Chinese';
+        case 'ar': return 'Arabic';
+        case 'es': return 'Spanish';
+        case 'other': return otherLanguage;
+        default: return 'English';
+    }
+}
+document.addEventListener('DOMContentLoaded', function() {
+    const nativeLanguage = document.getElementById('nativeLanguage');
+    const otherLanguageInput = document.getElementById('otherLanguage');
+    const voiceDropdown = document.getElementById('voiceDropdown');
+
+    // Handle language selection
+    nativeLanguage.addEventListener('change', function() {
+        const selectedLanguage = this.value;
+        console.log(`Selected language: ${selectedLanguage}`);
+
+        if (selectedLanguage === 'other') {
+            otherLanguageInput.classList.remove('hidden');
+            otherLanguageInput.focus(); // Focus on the input field for other language
+        } else {
+            otherLanguageInput.classList.add('hidden');
+        }
+    });
+
+    // Handle voice selection
+    voiceDropdown.addEventListener('change', function() {
+        const selectedVoice = this.value;
+        console.log(`Selected voice: ${selectedVoice}`);
+    });
+});
+
 async function generateStory(prompt) {
     console.log('Contacting OpenAI server with prompt:', prompt); // Debugging code
 
@@ -64,31 +100,10 @@ async function generateDallEPrompt(story) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    const currentPage = window.location.pathname.split('/').pop();
-    const navLinks = document.querySelectorAll('.nav-container nav ul li a');
-
-    navLinks.forEach(link => {
-        const linkPage = link.getAttribute('href').split('/').pop();
-        if (linkPage === currentPage) {
-            link.classList.add('current-page');
-        }
-    });
-});
 
 
-document.addEventListener('DOMContentLoaded', function() {
-    const nativeLanguage = document.getElementById('nativeLanguage');
-    const otherLanguageInput = document.getElementById('otherLanguage');
 
-    nativeLanguage.addEventListener('change', function() {
-        if (this.value === 'other') {
-            otherLanguageInput.classList.remove('hidden');
-        } else {
-            otherLanguageInput.classList.add('hidden');
-        }
-    });
-});
+
 
 document.addEventListener('DOMContentLoaded', function() {
     const takeMattersButton = document.getElementById('takeMattersButton');
@@ -123,8 +138,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         console.log('Displaying story:', story); // Debugging code
-        console.log('Displaying image URL:', imageUrl); // Debugging code
-
         storyContainer.innerHTML = `
             <h2>${title}</h2>
             <img src="${imageUrl}" alt="Generated Image" class="generated-image" style="max-width: 100%; height: auto; border-radius: 10px; margin-bottom: 20px;">
@@ -248,19 +261,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ text: text, voice: voice })
+                body: JSON.stringify({ text: text, voice: voice }) // Pass the voice to the server
             });
     
-            if (voice) {
-                const data = await response.json();
-                const audioUrl = data.audioUrl;
-                const audio = new Audio(audioUrl);
-                audio.play();
-            } else {
+            if (response.ok) {
                 const blob = await response.blob();
                 const url = URL.createObjectURL(blob);
                 const audio = new Audio(url);
                 audio.play();
+            } else {
+                throw new Error('Network response was not ok.');
             }
         } catch (error) {
             console.error('Error reading story aloud:', error);
@@ -396,15 +406,24 @@ function showTranslation(selectedText, translation) {
 
 // Function to translate the entire story
 async function translateStory() {
-    const storyContent = document.getElementById('story-content').textContent;
+    const translationToggle = document.getElementById('translation-toggle').classList.contains('active');
+    if (!translationToggle) {
+        console.log('Translation toggle is not active. Translation not triggered.');
+        return;
+    }
+
+    const storyContentElement = document.getElementById('story-content');
+    const storyText = storyContentElement.textContent;
     let targetLanguage = document.getElementById('nativeLanguage').value;
+
     if (targetLanguage === 'other') {
         targetLanguage = document.getElementById('otherLanguage').value.trim();
     }
+
     if (targetLanguage && targetLanguage !== 'default') {
-        const translatedStory = await translateText(storyContent, targetLanguage);
+        const translatedStory = await translateText(storyText, targetLanguage);
         if (translatedStory) {
-            document.getElementById('story-content').textContent = translatedStory;
+            storyContentElement.textContent = translatedStory;  // Update only the text content
         }
     }
 }
@@ -412,6 +431,8 @@ async function translateStory() {
 
 // Event listener for double-click on story content
 document.addEventListener('dblclick', handleDoubleClick);
+
+
 
 // Event listener for translation toggle
 document.getElementById('translation-toggle').addEventListener('click', function() {
@@ -421,26 +442,4 @@ document.getElementById('translation-toggle').addEventListener('click', function
 
 // Event listener for translate button
 translateButton.addEventListener('click', translateStory);
-
-function askReflectiveQuestions() {
-    const questions = [
-        'What did you learn from the story?',
-        'How did the story make you feel?',
-        'Can you relate any part of the story to your own life?',
-        'What was your favorite part of the story and why?',
-        'If you could change one thing in the story, what would it be?',
-        'How does this help in your language learning goals?'
-    ];
-
-    const questionContainer = document.createElement('div');
-    questionContainer.className = 'question-container';
-
-    questions.forEach(question => {
-        const questionElement = document.createElement('p');
-        questionElement.textContent = question;
-        questionContainer.appendChild(questionElement);
-    });
-
-    storyContainer.appendChild(questionContainer);
-}
 });

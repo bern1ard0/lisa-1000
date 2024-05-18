@@ -300,14 +300,17 @@ async function translateText(text, targetLanguage) {
     }
 }
 
-// Function to handle double-click event on text
 async function handleDoubleClick() {
     const selectedText = window.getSelection().toString().trim();
     if (selectedText) {
         const translationToggle = document.getElementById('translation-toggle').classList.contains('active');
         if (translationToggle) {
-            const targetLanguage = document.getElementById('nativeLanguage').value;
-            if (targetLanguage !== 'default') {
+            let targetLanguage = document.getElementById('nativeLanguage').value;
+            if (targetLanguage === 'other') {
+                targetLanguage = document.getElementById('otherLanguage').value.trim();
+            }
+
+            if (targetLanguage && targetLanguage !== 'default') {
                 const translation = await translateText(selectedText, targetLanguage);
                 if (translation) {
                     showTranslation(selectedText, translation);
@@ -364,14 +367,18 @@ function showTranslation(selectedText, translation) {
 // Function to translate the entire story
 async function translateStory() {
     const storyContent = document.getElementById('story-content').textContent;
-    const targetLanguage = document.getElementById('nativeLanguage').value;
-    if (targetLanguage !== 'default') {
+    let targetLanguage = document.getElementById('nativeLanguage').value;
+    if (targetLanguage === 'other') {
+        targetLanguage = document.getElementById('otherLanguage').value.trim();
+    }
+    if (targetLanguage && targetLanguage !== 'default') {
         const translatedStory = await translateText(storyContent, targetLanguage);
         if (translatedStory) {
             document.getElementById('story-content').textContent = translatedStory;
         }
     }
 }
+
 
 // Event listener for double-click on story content
 document.addEventListener('dblclick', handleDoubleClick);

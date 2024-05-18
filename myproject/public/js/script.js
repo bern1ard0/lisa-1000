@@ -154,15 +154,17 @@ async function translateText(text, targetLanguage) {
         return null;
     }
 }
-
-// Function to handle double-click event on text
 async function handleDoubleClick() {
     const selectedText = window.getSelection().toString().trim();
     if (selectedText) {
         const translationToggle = document.getElementById('translation-toggle').classList.contains('active');
         if (translationToggle) {
-            const targetLanguage = document.getElementById('nativeLanguage').value;
-            if (targetLanguage !== 'default') {
+            let targetLanguage = document.getElementById('nativeLanguage').value;
+            if (targetLanguage === 'other') {
+                targetLanguage = document.getElementById('otherLanguage').value.trim();
+            }
+
+            if (targetLanguage && targetLanguage !== 'default') {
                 const translation = await translateText(selectedText, targetLanguage);
                 if (translation) {
                     showTranslation(selectedText, translation);
@@ -179,6 +181,7 @@ async function handleDoubleClick() {
         }
     }
 }
+
 
 
 // Function to show popup with content
@@ -219,8 +222,11 @@ function showTranslation(selectedText, translation) {
 // Function to translate the entire story
 async function translateStory() {
     const storyContent = document.getElementById('story-content').textContent;
-    const targetLanguage = document.getElementById('nativeLanguage').value;
-    if (targetLanguage !== 'default') {
+    let targetLanguage = document.getElementById('nativeLanguage').value;
+    if (targetLanguage === 'other') {
+        targetLanguage = document.getElementById('otherLanguage').value.trim();
+    }
+    if (targetLanguage && targetLanguage !== 'default') {
         const translatedStory = await translateText(storyContent, targetLanguage);
         if (translatedStory) {
             document.getElementById('story-content').textContent = translatedStory;
@@ -228,9 +234,22 @@ async function translateStory() {
     }
 }
 
+
 // Event listener for double-click on story content
 document.addEventListener('dblclick', handleDoubleClick);
 
+document.addEventListener('DOMContentLoaded', function() {
+    const nativeLanguage = document.getElementById('nativeLanguage');
+    const otherLanguageInput = document.getElementById('otherLanguage');
+
+    nativeLanguage.addEventListener('change', function() {
+        if (this.value === 'other') {
+            otherLanguageInput.classList.remove('hidden');
+        } else {
+            otherLanguageInput.classList.add('hidden');
+        }
+    });
+});
 // Event listener for translation toggle
 document.getElementById('translation-toggle').addEventListener('click', function() {
     this.classList.toggle('active');
@@ -240,15 +259,18 @@ document.getElementById('translation-toggle').addEventListener('click', function
 // Event listener for translate button
 translateButton.addEventListener('click', translateStory);
 
-function languageName(lang) {
+function languageName(lang, otherLanguage) {
     switch (lang) {
         case 'fr': return 'French';
         case 'de': return 'German';
         case 'zh': return 'Chinese';
         case 'ar': return 'Arabic';
+        case 'es': return 'Spanish';
+        case 'other': return otherLanguage;
         default: return 'English';
     }
 }
+
 
 function displayAlert(title, text, audioUrl) {
     Swal.fire({

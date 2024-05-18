@@ -23,7 +23,9 @@
                             <option value="de">Deutsch</option>
                             <option value="zh">中文</option>
                             <option value="ar">العربية</option>
+                            <option value="other">Other...</option>
                         </select>
+                        <input type="text" id="otherLanguage" class="hidden" placeholder="Please specify your language">
                     </li>
                     <li>
                         <div id="translation-toggle" class="translation-toggle">T</div> <!-- Translation toggle -->
@@ -114,16 +116,13 @@
             <label for="voiceDropdown">Select Voice:</label> 
             <select id="voiceDropdown">
                 <option value="">Select Voice</option>
-                <option value="elon">Elon Musk</option>
-                <option value="morgan_freeman">Morgan Freeman</option>
-                <option value="ariana-grande">Ariana Grande</option>
-                <option value="rihanna">Rihanna</option>
-                <option value="drake">Drake</option>
-                <option value="kanye-west">Kanye West</option>
-                <option value="oprah_winfrey">Oprah Winfrey</option>
-                <option value="trumpty">Trump</option>
-                <option value="mcgregor">Conor McGregor</option>
-            </select>
+                <option value="alloy">Alloy</option>
+                <option value="echo">Echo</option>
+                <option value="fable">Fable</option>
+                <option value="onyx">Onyx</option>
+                <option value="nova">Nova</option>
+                <option value="shimmer">Shimmer</option>
+            </select>            
             <button id="readButton">Read</button>
             <button id="translateButton">Translate</button>
             <button id="narrateButton">Narrate</button>

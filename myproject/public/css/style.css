@@ -156,6 +156,10 @@ audio {
     font-size: 75px;
 }
 
+.hidden {
+    display: none;
+}
+
 .translation-toggle {
     display: inline-block;
     width: 40px;

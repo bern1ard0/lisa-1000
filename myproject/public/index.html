@@ -23,7 +23,9 @@
                             <option value="de">Deutsch</option>
                             <option value="zh">中文</option>
                             <option value="ar">العربية</option>
+                            <option value="other">Other...</option>
                         </select>
+                        <input type="text" id="otherLanguage" class="hidden" placeholder="Please specify your language">
                     </li>
                     <li>
                         <div id="translation-toggle" class="translation-toggle">T</div> <!-- Translation toggle -->
@@ -50,12 +52,26 @@
         <article id="story-container">
             <h2 id="story-title">Featured Story</h2>
             <p id="story-content">[Story content goes here]</p>
-            <button id="readButton">Read Aloud</button>
+            <label for="voiceDropdown">Select Voice:</label> 
+            <select id="voiceDropdown">
+                <option value="">Select Voice</option>
+                <option value="alloy">Alloy</option>
+                <option value="echo">Echo</option>
+                <option value="fable">Fable</option>
+                <option value="onyx">Onyx</option>
+                <option value="nova">Nova</option>
+                <option value="shimmer">Shimmer</option>
+            </select>  
+            <button id="readButton">
+                <img src="images/speaker.png" alt="Read" style="width:20px;height:20px;">
+                Read Aloud</button>
             <button id="recordButton">
                 <img src="images/mic.png" alt="Record" style="width:20px;height:20px;">
                 Record
             </button>
-            <button id="translateButton">Translate</button>            
+            <button id="translateButton">
+                <img src="images/translate.png" alt="translate" style="width:20px;height:20px;">
+                Translate</button>            
         </article>
         <aside id="recommendations">
             <h3>Recommended Stories</h3>

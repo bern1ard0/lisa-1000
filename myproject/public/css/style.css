@@ -360,12 +360,12 @@ select:focus, input:focus, textarea:focus {
     margin: 5px;
 }
 
-.us { background-image: url('https://lh3.googleusercontent.com/-9BEUs3L9gVE/VhE40dddysI/AAAAAAAAkm0/YIls2k0h79w/s1600/united-states-flag-animation.gif'); }
-.fr { background-image: url('https://lh3.googleusercontent.com/-Ym4VD8myqUM/VhEyjRvvWOI/AAAAAAAAjaw/zTPj6-jD9gw/s1600/france-flag-animation.gif'); }
-.de { background-image: url('https://lh3.googleusercontent.com/-oPzOMIOg4mw/VhEyxoushSI/AAAAAAAAjdw/rxNagrCV45k/s1600/germany-flag-animation.gif'); }
-.es { background-image: url('https://lh3.googleusercontent.com/-W24Nmtyp4sY/VhE3ut8oUdI/AAAAAAAAkZU/04Vp7Z0AEyE/s1600/spain-flag-animation.gifg'); }
-.cn { background-image: url('https://lh3.googleusercontent.com/-zFu9YOux_0o/VhExb8_8E8I/AAAAAAAAjLQ/Us7zTFAku-Q/s1600/china-flag-animation.gif'); }
-.ar { background-image: url('https://lh3.googleusercontent.com/-0TIKrIkN5gY/VhE3K3hn3FI/AAAAAAAAkSU/31JBLnPNr_E/s1600/saudi-arabia-flag-animation.gif'); }
+.us { background-image: url('/myproject/public/images/united-states-flag-animation.gif'); }
+.fr { background-image: url('/myproject/public/images/france-flag-animation.gif'); }
+.de { background-image: url('/myproject/public/images/germany-flag-animation.gif'); }
+.es { background-image: url('/myproject/public/images/spain-flag-animation.gif'); }
+.cn { background-image: url('/myproject/public/images/china-flag-animation.gif'); }
+.ar { background-image: url('/myproject/public/images/saudi-arabia-flag-animation.gif'); }
 
 
 @keyframes fadeIn {

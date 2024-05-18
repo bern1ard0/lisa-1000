@@ -116,35 +116,129 @@ document.getElementById('readButton').addEventListener('click', function() {
 
 
 
-async function translateText(text, targetLanguage) {
-    const response = await fetch(`https://translation.googleapis.com/language/translate/v2?target=${targetLanguage}&q=${encodeURIComponent(text)}`, {
-        headers: { 'Authorization': `Bearer AIzaSyD6I96KfvBxEaRwn0C67-D1OCMuKzJQJDM` }
-    });
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(`Failed to translate text: ${data.error.message}`);
-    }
-
-    return data.data.translations[0].translatedText;
-}
-document.body.addEventListener('dblclick', async () => {
-    // Get the selected text
-    const selectedText = window.getSelection().toString().trim();
-
-    // Get the selected language
-    const language = document.getElementById('language').value;
-
+// Function to fetch the definition of a word
+async function defineText(word) {
     try {
-        // Translate the selected text into the selected language
-        const translation = await translateText(selectedText, language);
+        const response = await fetch('/definition', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ word: word })
+        });
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return data.definition;
+    } catch (error) {
+        console.error('Error getting definition:', error);
+        return null;
+    }
+}
 
-        // Display the translation
-        alert(`Translation of "${selectedText}" in ${language}:\n\n${translation}`);
+// Function to translate text
+async function translateText(text, targetLanguage) {
+    try {
+        const response = await fetch('/translate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text: text, targetLanguage: targetLanguage })
+        });
+        const data = await response.json();
+        return data.translatedText;
     } catch (error) {
         console.error('Error translating text:', error);
+        return null;
     }
+}
+
+// Function to handle double-click event on text
+async function handleDoubleClick() {
+    const selectedText = window.getSelection().toString().trim();
+    if (selectedText) {
+        const translationToggle = document.getElementById('translation-toggle').classList.contains('active');
+        if (translationToggle) {
+            const targetLanguage = document.getElementById('nativeLanguage').value;
+            if (targetLanguage !== 'default') {
+                const translation = await translateText(selectedText, targetLanguage);
+                if (translation) {
+                    showTranslation(selectedText, translation);
+                }
+            }
+        } else {
+            const definition = await defineText(selectedText);
+            if (definition) {
+                showPopup(`
+                    <h2>Definition</h2>
+                    <p>${definition}</p>
+                `);
+            }
+        }
+    }
+}
+
+
+// Function to show popup with content
+function showPopup(content) {
+    const popup = document.createElement('div');
+    popup.className = 'popup';
+    popup.innerHTML = `
+        <div class="popup-content">
+            <span class="close-btn">&times;</span>
+            ${content}
+        </div>
+    `;
+    document.body.appendChild(popup);
+
+    const closeButton = popup.querySelector('.close-btn');
+    closeButton.addEventListener('click', () => {
+        popup.remove();
+    });
+}
+
+// Function to show translation above the selected text
+function showTranslation(selectedText, translation) {
+    const range = window.getSelection().getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    const tooltip = document.createElement('div');
+    tooltip.className = 'translation-tooltip';
+    tooltip.innerText = translation;
+    document.body.appendChild(tooltip);
+
+    tooltip.style.left = `${rect.left + window.scrollX}px`;
+    tooltip.style.top = `${rect.top + window.scrollY - tooltip.offsetHeight}px`;
+
+    setTimeout(() => {
+        tooltip.remove();
+    }, 3000);
+}
+
+// Function to translate the entire story
+async function translateStory() {
+    const storyContent = document.getElementById('story-content').textContent;
+    const targetLanguage = document.getElementById('nativeLanguage').value;
+    if (targetLanguage !== 'default') {
+        const translatedStory = await translateText(storyContent, targetLanguage);
+        if (translatedStory) {
+            document.getElementById('story-content').textContent = translatedStory;
+        }
+    }
+}
+
+// Event listener for double-click on story content
+document.addEventListener('dblclick', handleDoubleClick);
+
+// Event listener for translation toggle
+document.getElementById('translation-toggle').addEventListener('click', function() {
+    this.classList.toggle('active');
+    console.log('Translation toggle:', this.classList.contains('active'));
 });
+
+// Event listener for translate button
+translateButton.addEventListener('click', translateStory);
 
 function languageName(lang) {
     switch (lang) {
@@ -174,20 +268,8 @@ function displayAlert(title, text, audioUrl) {
     });
 }
 
-async function getDefinitionAndPlayAudio(word) {
-    const response = await fetch(`/definition/${word}`);
-    const data = await response.json();
-
-    if (!response.ok) {
-        throw new Error(`Failed to get definition: ${data.error}`);
-    }
-
-    const definition = data.definition; // Adjust this line to match your API
-
-    displayAlert(`Definition of ${word}`, definition);
-}
 document.addEventListener('DOMContentLoaded', function() {
-    const narrateButton = document.getElementById('narrateButton');
+    const recordButton = document.getElementById('recordButton');
     
     // Check if the browser supports SpeechRecognition
     if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
@@ -212,7 +294,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         // Start speech recognition when the "Narrate" button is clicked
-        narrateButton.addEventListener('click', function() {
+        recordButton.addEventListener('click', function() {
             recognition.start();
         });
     } else {
@@ -346,23 +428,7 @@ function displayAlert(message, transcript) {
 }
 
 
-document.body.addEventListener('dblclick', async () => {
-    // Get the selected text
-    const selectedText = window.getSelection().toString().trim();
 
-    // If there's no selected text, don't do anything
-    if (!selectedText) {
-        return;
-    }
-
-    try {
-        // Get the definition of the selected text and show an alert with the definition
-        await defineText(selectedText);
-    } catch (error) {
-        // If an error occurs, log it to the console
-        console.error('Failed to get definition:', error);
-    }
-});
 function fetchAndDisplayStory(storyId) {
     fetch('data/stories.json')
         .then(response => response.json())
@@ -385,22 +451,6 @@ function displayStory(story) {
 
         titleElement.innerText = story.title; // Dynamically update the title
         contentElement.innerHTML = story.sentences.map(sentence => `<p>${sentence}</p>`).join(''); // Dynamically update the content
-    }
-}
-async function defineText(text) {
-    try {
-        const response = await fetch('/definition', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ text: text })
-        });
-        const data = await response.json();
-        return data.definition;
-    } catch (error) {
-        console.error('Error defining text:', error);
-        return text;
     }
 }
 

@@ -141,7 +141,9 @@ To see Lisa 1000 in action, check out our demo video:
 
 [![Lisa 1000 Demo](https://img.youtube.com/vi/YOUR_VIDEO_ID/0.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
 
-Replace `YOUR_VIDEO_ID` with the actual YouTube video ID of your demo. If the video is hosted on another platform, replace the link accordingly.
+Note: Will Upload Video Walkthrough By the end of the day today.
+For now, I'll let these pictures act as teasers.
+
 ![alt text](image.png)
 ![alt text](image-1.png)
 ![alt text](image-2.png)

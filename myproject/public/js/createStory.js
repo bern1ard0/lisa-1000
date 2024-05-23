@@ -120,7 +120,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const fineTuneOptions = document.getElementById('fineTuneOptions');
     const storyContainer = document.getElementById('c-story-container');
     
-    let selectedVoice = '';
+    let selectedVoice = 'nova'; // Default to "Lisa"
+
+    // Ensure the default voice is set to "Lisa" in the dropdown
+    voiceDropdown.value = 'nova';
 
     voiceDropdown.addEventListener('change', function() {
         selectedVoice = voiceDropdown.value;

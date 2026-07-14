@@ -1,21 +1,38 @@
 import express from 'express';
 import cors from 'cors';
+import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import fetch from 'node-fetch';
-import fs from 'fs';
-import path from 'path';
+import { higgsfield } from '@higgsfield/client/v2';
+
 const app = express();
 app.use(express.json());
 app.use(cors()); // Enable CORS for all routes
 const PORT = process.env.PORT || 3000;
 app.use(express.static('public'));
 
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Higgsfield reads HF_CREDENTIALS ("KEY_ID:KEY_SECRET") from the environment.
+// OpenAI is kept for text-to-speech only (Claude does not generate audio).
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const CLAUDE_MODEL = 'claude-opus-4-8';
+
+// Extract the plain text from a Claude response (skips thinking blocks).
+function claudeText(message) {
+    const text = message.content
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
+        .join('')
+        .trim();
+    if (!text) {
+        throw new Error(`Claude returned no text (stop_reason: ${message.stop_reason})`);
+    }
+    return text;
+}
 
 
-// Endpoint for generating definitions using OpenAI
+// Endpoint for generating definitions using Claude
 app.post('/definition', async (req, res) => {
     const { word } = req.body;
 
@@ -24,16 +41,16 @@ app.post('/definition', async (req, res) => {
     }
 
     try {
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4',
+        const message = await anthropic.messages.create({
+            model: CLAUDE_MODEL,
+            max_tokens: 1024,
+            system: 'You are a Dictionary that provides definitions for words in a simple and clear manner plus example use case. You return In Dictionary Format.',
             messages: [
-                { role: 'system', content: 'You are a Dictionary that provides definitions for words in a simple and clear manner plus example use case. You return In Dictionary Format.' },
                 { role: 'user', content: `Define the word "${word}".` }
             ]
         });
 
-        const definition = completion.choices[0].message.content.trim();
-        res.json({ definition });
+        res.json({ definition: claudeText(message) });
     } catch (error) {
         console.error('Error getting definition:', error);
         res.status(500).json({ error: 'Failed to get definition' });
@@ -41,7 +58,7 @@ app.post('/definition', async (req, res) => {
 });
 
 
-// Endpoint for translating text
+// Endpoint for translating text using Claude
 app.post('/translate', async (req, res) => {
     const { text, targetLanguage } = req.body;
 
@@ -50,16 +67,16 @@ app.post('/translate', async (req, res) => {
     }
 
     try {
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4',
+        const message = await anthropic.messages.create({
+            model: CLAUDE_MODEL,
+            max_tokens: 8192,
+            system: 'You are a helpful assistant that translates text. Reply with the translation only — no preamble.',
             messages: [
-                { role: 'system', content: 'You are a helpful assistant that translates text.' },
                 { role: 'user', content: `Translate the following text to ${targetLanguage}: ${text}` }
             ]
         });
 
-        const translatedText = completion.choices[0].message.content.trim();
-        res.json({ translatedText });
+        res.json({ translatedText: claudeText(message) });
     } catch (error) {
         console.error('Error translating text:', error);
         res.status(500).json({ error: 'Failed to translate text' });
@@ -67,9 +84,9 @@ app.post('/translate', async (req, res) => {
 });
 
 
-// Endpoint for generating speech
-app.post('/generate-speech', async (req, res) => {
-    const { text, voice } = req.body; // Destructure the voice from the request body
+// Endpoint for generating speech (OpenAI TTS — Claude does not do audio)
+async function generateSpeech(req, res) {
+    const { text, voice } = req.body;
 
     if (!text) {
         return res.status(400).send({ error: 'No text provided' });
@@ -77,8 +94,8 @@ app.post('/generate-speech', async (req, res) => {
 
     try {
         const mp3 = await openai.audio.speech.create({
-            model: "tts-1",
-            voice: voice, // Use the specified voice
+            model: 'tts-1',
+            voice: voice || 'nova',
             input: text,
         });
 
@@ -89,29 +106,31 @@ app.post('/generate-speech', async (req, res) => {
         });
         res.end(buffer);
     } catch (error) {
-        console.error('Error generating speech with OpenAI:', error);
-        res.status(500).send({ error: 'Failed to generate speech with OpenAI' });
+        console.error('Error generating speech:', error);
+        res.status(500).send({ error: 'Failed to generate speech' });
     }
-});
+}
+
+app.post('/generate-speech', generateSpeech);
+// The library/index reader posts here — same handler, default voice.
+app.post('/api/synthesize-speech', generateSpeech);
 
 
-
-// Endpoint for generating definitions using OpenAI
+// Endpoint for generating definitions using Claude (GET variant)
 app.get('/definition/:word', async (req, res) => {
     const word = req.params.word;
 
     try {
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4o',
+        const message = await anthropic.messages.create({
+            model: CLAUDE_MODEL,
+            max_tokens: 1024,
+            system: 'You are a helpful assistant that provides definitions for words.',
             messages: [
-                { role: 'system', content: 'You are a helpful assistant that provides definitions for words.' },
                 { role: 'user', content: `Define the word "${word}" in a simple and clear manner plus example use case.` }
-            ],
-            response_format: { type: "json_object" }
+            ]
         });
 
-        const definition = completion.choices[0].message.content.trim();
-        res.json({ definition });
+        res.json({ definition: claudeText(message) });
     } catch (error) {
         console.error('Error getting definition:', error);
         res.status(500).json({ error: 'Failed to get definition' });
@@ -119,33 +138,43 @@ app.get('/definition/:word', async (req, res) => {
 });
 
 
+// Endpoint for generating a story (Claude) and an illustration (Higgsfield Soul)
 app.post('/generate-story', async (req, res) => {
     const prompt = req.body.prompt;
     if (!prompt) {
         return res.status(400).send({ error: 'No prompt provided' });
     }
     try {
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4',
+        const message = await anthropic.messages.create({
+            model: CLAUDE_MODEL,
+            max_tokens: 8192,
+            thinking: { type: 'adaptive' },
+            system: 'You are a helpful assistant designed to write short stories and suitable image prompts in plain text format: story|imagePrompt. Output exactly one "|" separating the story from the image prompt, and nothing else.',
             messages: [
-                { role: 'system', content: 'You are a helpful assistant designed to write short stories and suitable image prompts in plain text format: story|imagePrompt. Always Perform a 90 degree rotation of the image.'},
                 { role: 'user', content: prompt }
             ]
         });
 
-        const content = completion.choices[0].message.content.split('|');
-        let story = content;
-        let imagePrompt = story[0].substring(0, 1000);     
-        const imageResponse = await openai.images.generate({
-            model: "dall-e-3",
-            prompt: imagePrompt.trim(),
-            n: 1,
-            size: "1024x1024",
+        const [story = '', imagePrompt = ''] = claudeText(message)
+            .split('|')
+            .map((part) => part.trim());
+
+        const generation = await higgsfield.subscribe('/v1/text2image/soul', {
+            input: {
+                prompt: (imagePrompt || story).substring(0, 1000),
+                width_and_height: '1536x1536',
+                quality: '1080p',
+                batch_size: 1,
+                enhance_prompt: true,
+            },
+            withPolling: true,
         });
 
-        const imageUrl = imageResponse.data[0].url;
+        if (generation.status !== 'completed' || !generation.images?.length) {
+            throw new Error(`Higgsfield image generation ${generation.status}`);
+        }
 
-        res.json({ story, imageUrl });
+        res.json({ story, imageUrl: generation.images[0].url });
     } catch (error) {
         console.error('Error generating story and image:', error);
         res.status(500).send({ error: 'Failed to generate story and image' });

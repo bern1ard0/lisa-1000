@@ -1,6 +1,6 @@
 // Function to generate a story and an image with the server endpoint
 async function generateStory(prompt) {
-    console.log('Contacting OpenAI server with prompt:', prompt); // Debugging code
+    console.log('Contacting story server with prompt:', prompt); // Debugging code
 
     try {
         const response = await fetch('/generate-story', {
@@ -16,7 +16,7 @@ async function generateStory(prompt) {
         }
 
         const data = await response.json();
-        console.log('Received story and image from OpenAI:', data); // Debugging code
+        console.log('Received story and image from server:', data); // Debugging code
         return data;
     } catch (error) {
         console.error('Network or server error:', error);
@@ -493,10 +493,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const utterance = new SpeechSynthesisUtterance(text);
         window.speechSynthesis.speak(utterance);
     }
-});// Function to display an alert with a message and transcript
-function displayAlert(message, transcript) {
-    alert(`${message} ${transcript}`);
-}
+});
 
 
 

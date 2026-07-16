@@ -17,8 +17,8 @@ LISA 1000 is an AI-aided language learning tool that uses storytelling to help u
 
 - **Text to Speech**: Via OpenAI's TTS API + Choice of voice.
 - **Speech to Text Synthesis**: Webkit speech recognition to capture user narration.
-- **ChatCompletion**: Implemented with different roles for a richer interaction.
-- **DALL-E Image Generation**: Generate images to accompany your stories.
+- **Claude-Powered Stories, Definitions & Translation**: Story generation, word definitions, and translation are handled by Anthropic's Claude API (Claude Opus 4.8).
+- **Higgsfield Soul Image Generation**: Generate images to accompany your stories via the Higgsfield API.
 - **Interactive User Interface**: Visually appealing and highly interactive UI.
 - **Visually Appealing User Interface**: Enhanced design for better user experience.
 - **Unrestricted Functionality**: No limitations on creativity and usage.
@@ -42,11 +42,13 @@ To get started with Lisa 1000, follow these steps:
     npm install
     ```
 
-4. **Set up the OpenAI API key**:
-    - Create a `.env` file in the `myproject` directory.
-    - Add your OpenAI API key to the `.env` file:
+4. **Set up the API keys**:
+    - Create a `.env` file in the `myproject` directory (or export these in your shell).
+    - Add your keys:
       ```plaintext
-      OPENAI_API_KEY=your_openai_api_key
+      ANTHROPIC_API_KEY=your_anthropic_api_key      # Claude: stories, definitions, translation
+      HF_CREDENTIALS=your_key_id:your_key_secret    # Higgsfield: image generation
+      OPENAI_API_KEY=your_openai_api_key            # OpenAI: text-to-speech only
       ```
 
 5. **Start the server**:
@@ -97,8 +99,9 @@ To get started with Lisa 1000, follow these steps:
 
 - **APIs**:
   - Web Speech API for speech recognition and synthesis
-  - OpenAI API for text-to-speech and DALL-E image generation
-  - Custom translation API endpoint
+  - Anthropic Claude API (Claude Opus 4.8) for story generation, word definitions, and translation
+  - Higgsfield API (Soul) for image generation
+  - OpenAI API for text-to-speech
 
 ## Course Project Reflection
 

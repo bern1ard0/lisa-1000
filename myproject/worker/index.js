@@ -3,9 +3,10 @@
 // don't match a file (and all POSTs) land here.
 //
 // Secrets come from `env`:
-//   ANTHROPIC_API_KEY  Claude (stories, definitions, translation)
-//   OPENAI_API_KEY     text-to-speech only
-//   HF_CREDENTIALS     Higgsfield "KEY_ID:KEY_SECRET" (story illustrations)
+//   ANTHROPIC_API_KEY    Claude (stories, definitions, translation)
+//   ELEVENLABS_API_KEY   text-to-speech (streaming narration)
+//   OPENAI_API_KEY       images + TTS fallback when ElevenLabs is unavailable
+//   HF_CREDENTIALS       Higgsfield "KEY_ID:KEY_SECRET" (story illustrations)
 
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -102,18 +103,66 @@ async function handleTranslate(anthropic, body) {
     return json({ translatedText: claudeText(message) });
 }
 
-// OpenAI TTS via REST (Claude does not generate audio)
+// ---------- Text-to-speech (ElevenLabs streaming, OpenAI fallback) ----------
+
+// Cloned narrator voices. The client normally sends a concrete voice_id;
+// these cover named keys and legacy OpenAI voice names still in the wild.
+const ELEVEN_VOICES = { lisa: 'kv1Qe4fUcVPEC2ZisX5i', adam: 'IRHApOXLvnW57QJPQH2P' };
+
+function resolveElevenVoiceId(voice) {
+    if (!voice) return ELEVEN_VOICES.lisa;
+    if (ELEVEN_VOICES[voice]) return ELEVEN_VOICES[voice];
+    if (/^[a-zA-Z0-9]{16,}$/.test(voice)) return voice; // already a voice_id
+    return ['onyx', 'echo', 'adam'].includes(voice) ? ELEVEN_VOICES.adam : ELEVEN_VOICES.lisa;
+}
+
+// Emotional delivery cues like [whispers]/[excited] need the v3 model;
+// plain text uses multilingual v2 (same voice can read any language).
+function elevenModelFor(text) {
+    return /\[[^\]\n]{2,30}\]/.test(text) ? 'eleven_v3' : 'eleven_multilingual_v2';
+}
+
 async function handleSpeech(env, body) {
     const { text, voice } = body;
     if (!text) return json({ error: 'No text provided' }, 400);
 
+    // ElevenLabs first: the upstream body is passed through untouched, so the
+    // client starts playing while synthesis is still running.
+    if (env.ELEVENLABS_API_KEY) {
+        const voiceId = resolveElevenVoiceId(voice);
+        const resp = await fetch(
+            `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_128`,
+            {
+                method: 'POST',
+                headers: {
+                    'xi-api-key': env.ELEVENLABS_API_KEY,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ text, model_id: elevenModelFor(text) }),
+            }
+        );
+        if (resp.ok) {
+            return new Response(resp.body, {
+                status: 200,
+                headers: { 'Content-Type': 'audio/mpeg' },
+            });
+        }
+        console.error('ElevenLabs TTS failed, falling back to OpenAI:', resp.status, await resp.text());
+    }
+
+    // Fallback: OpenAI TTS. Strip emotional cues (OpenAI would read them out)
+    // and map named/ElevenLabs voices onto the closest OpenAI equivalents.
+    const plain = text.replace(/\[[^\]\n]{2,30}\]\s*/g, '');
+    const openaiVoice = /^(alloy|echo|fable|onyx|nova|shimmer)$/.test(voice || '')
+        ? voice
+        : (['adam', ELEVEN_VOICES.adam].includes(voice) ? 'onyx' : 'nova');
     const resp = await fetch('https://api.openai.com/v1/audio/speech', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model: 'tts-1', voice: voice || 'nova', input: text }),
+        body: JSON.stringify({ model: 'tts-1', voice: openaiVoice, input: plain }),
     });
 
     if (!resp.ok) {
@@ -184,6 +233,13 @@ async function generateIllustration(env, prompt) {
     return job.images[0].url;
 }
 
+const STORY_SYSTEM_PROMPT =
+    'You are a helpful assistant designed to write short stories. Output plain text in exactly this format: story|narration|imagePrompt. ' +
+    'The story is the clean text shown to the reader. ' +
+    'The narration is the SAME story with inline emotional delivery cues in square brackets placed before the phrases they affect — e.g. [warmly], [excited], [whispers], [sighs], [laughs] — for an expressive text-to-speech narrator. ' +
+    'The imagePrompt is a highly detailed illustration prompt for the story. ' +
+    'Output exactly two "|" characters separating the three parts, and nothing else.';
+
 async function handleGenerateStory(env, anthropic, body) {
     const prompt = body.prompt;
     if (!prompt) return json({ error: 'No prompt provided' }, 400);
@@ -191,16 +247,18 @@ async function handleGenerateStory(env, anthropic, body) {
     const message = await anthropic.messages.create({
         model: CLAUDE_MODEL,
         max_tokens: 8192,
-        system: 'You are a helpful assistant designed to write short stories and suitable image prompts in plain text format: story|imagePrompt. Output exactly one "|" separating the story from the image prompt, and nothing else.',
+        system: STORY_SYSTEM_PROMPT,
         messages: [{ role: 'user', content: prompt }],
     });
 
-    const [story = '', imagePrompt = ''] = claudeText(message)
-        .split('|')
-        .map((part) => part.trim());
+    const parts = claudeText(message).split('|').map((part) => part.trim());
+    // Expected: [story, narration, imagePrompt] — tolerate a missing narration part.
+    const story = parts[0] || '';
+    const narration = parts.length >= 3 ? parts[1] : story;
+    const imagePrompt = parts[parts.length - 1] || '';
 
     const imageUrl = await generateIllustrationOpenAI(env, (imagePrompt || story).substring(0, 1000));
-    return json({ story, imageUrl });
+    return json({ story, narration, imageUrl });
 }
 
 export default {

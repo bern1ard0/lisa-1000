@@ -92,10 +92,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const fineTuneOptions = document.getElementById('fineTuneOptions');
     const storyContainer = document.getElementById('c-story-container');
     
-    let selectedVoice = 'nova'; // Default to "Lisa"
+    let selectedVoice = 'lisa'; // Default to "Lisa"
+    // Story text annotated with [emotional cues] — used for narration only,
+    // never displayed. Cleared on translation (cues belong to the original).
+    let currentNarration = null;
 
     // Ensure the default voice is set to "Lisa" in the dropdown
-    voiceDropdown.value = 'nova';
+    voiceDropdown.value = 'lisa';
 
     voiceDropdown.addEventListener('change', function() {
         selectedVoice = voiceDropdown.value;
@@ -169,10 +172,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const randomLength = lengthOptions[Math.floor(Math.random() * lengthOptions.length)];
         const randomGenre = genreOptions[Math.floor(Math.random() * genreOptions.length)];
         const stopLoading = startLoading(randomStoryButton);
-        const storyData = await generateStory(`Write a ${randomLength} ${randomGenre} story suitable for language learning alongside a highly detailed relevant imagePrompt for the illustration: Your text output is: story|imagePrompt`);
+        const storyData = await generateStory(`Write a ${randomLength} ${randomGenre} story suitable for language learning alongside a narration copy with emotional delivery cues and a highly detailed relevant imagePrompt for the illustration: Your text output is: story|narration|imagePrompt`);
         stopLoading();
         if (storyData) {
             displayStory(storyData.story, storyData.imageUrl, `Generated ${randomGenre} Story`);
+            currentNarration = storyData.narration || null;
             buttonContainer.style.display = 'flex';
         } else {
             displayStory(null);
@@ -191,13 +195,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const emotion = document.getElementById('emotion').value;
         const language = document.getElementById('language').value;
     
-        const prompt = `Write a ${length} story with ${characterNum} characters (participants) in the ${language} language leaving you ${emotion} in the end. Alongside a highly detailed relevant imagePrompt for the illustration: Your text output is: story|imagePrompt`;
+        const prompt = `Write a ${length} story with ${characterNum} characters (participants) in the ${language} language leaving you ${emotion} in the end. Alongside a narration copy with emotional delivery cues and a highly detailed relevant imagePrompt for the illustration: Your text output is: story|narration|imagePrompt`;
         console.log(`Generating a story with prompt: ${prompt}`); // Debugging code
         const stopLoading = startLoading(generateFineTunedStoryButton);
         const storyData = await generateStory(prompt);
         stopLoading();
         if (storyData) {
             displayStory(storyData.story, storyData.imageUrl, `Generated ${genre} Story`);
+            currentNarration = storyData.narration || null;
             buttonContainer.style.display = 'flex';
         } else {
             displayStory(null);
@@ -218,7 +223,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const video = document.getElementById('video').checked;
         const subtitles = document.getElementById('subtitles').checked;
 
-        const prompt = `Title: ${title}, Theme: ${theme}, Input Language: ${inputLanguage}, Text: ${textInput}, outputLanguage: ${outputLanguage}, Music: ${music}, alongside a highly detailed relevant imagePrompt for the illustration: Your text output is: story|imagePrompt`;
+        const prompt = `Title: ${title}, Theme: ${theme}, Input Language: ${inputLanguage}, Text: ${textInput}, outputLanguage: ${outputLanguage}, Music: ${music}, alongside a narration copy with emotional delivery cues and a highly detailed relevant imagePrompt for the illustration: Your text output is: story|narration|imagePrompt`;
         console.log(`Generating a story with prompt: ${prompt}`); // Debugging code
         const submitButton = generateStoryForm.querySelector('button[type="submit"]');
         const stopLoading = startLoading(submitButton);
@@ -226,7 +231,10 @@ document.addEventListener('DOMContentLoaded', function() {
         stopLoading();
         if (storyData) {
             displayStory(storyData.story, storyData.imageUrl, title);
+            currentNarration = storyData.narration || null;
             buttonContainer.style.display = 'flex';
+            // Narrate in the language the story was generated in
+            window.currentStoryLanguage = outputLanguage;
         } else {
             displayStory(null);
         }
@@ -234,7 +242,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     readButton.addEventListener('click', function() {
         const storyText = document.getElementById('story-content').textContent;
-        readStoryAloud(storyText, selectedVoice);
+        // Prefer the cue-annotated narration when we have one for this story
+        readStoryAloud(currentNarration || storyText, selectedVoice);
     });
     translateButton.addEventListener('click', async function() {
         const translationToggle = document.getElementById('translation-toggle').classList.contains('active');
@@ -261,6 +270,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     const currentImageURL = document.querySelector('.generated-image').src;
                     const currentTitle = document.querySelector('#c-story-container h2').textContent;
                     displayStory(translatedStory, currentImageURL, currentTitle);
+                    // Narration follows the story's language from here on;
+                    // the cue-annotated copy belonged to the original language.
+                    window.currentStoryLanguage = targetLanguage;
+                    currentNarration = null;
                 }
             } finally {
                 translateButton.disabled = false;
@@ -276,28 +289,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
     narrateButton.addEventListener('click', function() {
         const storyText = document.getElementById('story-content').textContent;
-        readStoryAloud(storyText, selectedVoice);
+        readStoryAloud(currentNarration || storyText, selectedVoice);
     });
 
-    // Function to read the story aloud
-    async function readStoryAloud(text, voice) {
+    // Read the story aloud — streamed from ElevenLabs, voice picked from the
+    // language bank so a translated story is narrated in its own language.
+    async function readStoryAloud(text, voiceKey) {
         try {
-            const response = await fetch('/generate-speech', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ text: text, voice: voice }) // Pass the voice to the server
-            });
-    
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                const audio = new Audio(url);
-                audio.play();
-            } else {
-                throw new Error('Network response was not ok.');
-            }
+            await streamSpeech(text, voiceKey, window.currentStoryLanguage);
         } catch (error) {
             console.error('Error reading story aloud:', error);
         }

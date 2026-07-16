@@ -261,6 +261,80 @@ async function handleGenerateStory(env, anthropic, body) {
     return json({ story, narration, imageUrl });
 }
 
+// ---------- Works API (D1 — schema in docs/SCHEMA.md) ----------
+
+// GET /api/works?kind=&genre=&owner=&emotion=&character=
+// Library listing with every filter from the schema's feature->query map.
+async function handleListWorks(env, url) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+
+    const p = url.searchParams;
+    const where = [];
+    const binds = [];
+
+    if (p.get('kind'))  { where.push('w.kind = ?');     binds.push(p.get('kind')); }
+    if (p.get('genre')) { where.push('w.genre = ?');    binds.push(p.get('genre')); }
+    if (p.get('owner')) { where.push('w.owner_id = ?'); binds.push(p.get('owner')); }
+    if (p.get('emotion')) {
+        where.push('EXISTS (SELECT 1 FROM work_emotions we WHERE we.work_id = w.id AND we.emotion = ?)');
+        binds.push(p.get('emotion'));
+    }
+    if (p.get('character')) {
+        where.push(`EXISTS (SELECT 1 FROM work_characters wc
+                            JOIN characters c ON c.id = wc.character_id
+                            WHERE wc.work_id = w.id AND c.name = ? COLLATE NOCASE)`);
+        binds.push(p.get('character'));
+    }
+
+    const sql = `
+        SELECT w.id, w.kind, w.title, w.genre, w.language, w.length, w.owner_id,
+               w.cover_image_url, w.created_at,
+               (SELECT s.display_text FROM scenes s
+                WHERE s.work_id = w.id ORDER BY s.idx LIMIT 1) AS excerpt,
+               (SELECT GROUP_CONCAT(we.emotion) FROM work_emotions we
+                WHERE we.work_id = w.id) AS emotions
+        FROM works w
+        ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+        ORDER BY w.created_at DESC, w.id
+        LIMIT 100`;
+
+    const { results } = await env.DB.prepare(sql).bind(...binds).all();
+    return json({
+        works: results.map((r) => ({ ...r, emotions: r.emotions ? r.emotions.split(',') : [] })),
+    });
+}
+
+// GET /api/works/:id — full work: scenes (with lines), cast, emotions.
+async function handleGetWork(env, id) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+
+    const work = await env.DB.prepare('SELECT * FROM works WHERE id = ?').bind(id).first();
+    if (!work) return json({ error: 'Work not found' }, 404);
+
+    const [scenes, lines, cast, emotions] = await Promise.all([
+        env.DB.prepare('SELECT * FROM scenes WHERE work_id = ? ORDER BY idx').bind(id).all(),
+        env.DB.prepare(`SELECT sl.* FROM scene_lines sl
+                        JOIN scenes s ON s.id = sl.scene_id
+                        WHERE s.work_id = ? ORDER BY s.idx, sl.idx`).bind(id).all(),
+        env.DB.prepare(`SELECT c.*, wc.role FROM work_characters wc
+                        JOIN characters c ON c.id = wc.character_id
+                        WHERE wc.work_id = ?`).bind(id).all(),
+        env.DB.prepare('SELECT emotion FROM work_emotions WHERE work_id = ?').bind(id).all(),
+    ]);
+
+    const linesByScene = {};
+    for (const line of lines.results) {
+        (linesByScene[line.scene_id] ||= []).push(line);
+    }
+
+    return json({
+        ...work,
+        emotions: emotions.results.map((e) => e.emotion),
+        characters: cast.results,
+        scenes: scenes.results.map((s) => ({ ...s, lines: linesByScene[s.id] || [] })),
+    });
+}
+
 export default {
     async fetch(request, env) {
         const url = new URL(request.url);
@@ -280,9 +354,15 @@ export default {
                 if (path === '/generate-story') return await handleGenerateStory(env, anthropic, body);
             }
 
-            if (method === 'GET' && path.startsWith('/definition/')) {
-                const word = decodeURIComponent(path.slice('/definition/'.length));
-                return await handleDefinition(anthropic, word);
+            if (method === 'GET') {
+                if (path === '/api/works') return await handleListWorks(env, url);
+                if (path.startsWith('/api/works/')) {
+                    return await handleGetWork(env, decodeURIComponent(path.slice('/api/works/'.length)));
+                }
+                if (path.startsWith('/definition/')) {
+                    const word = decodeURIComponent(path.slice('/definition/'.length));
+                    return await handleDefinition(anthropic, word);
+                }
             }
 
             return json({ error: 'Not found' }, 404);

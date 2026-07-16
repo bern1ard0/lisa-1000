@@ -1,53 +1,89 @@
+// Build one library card. `getFullText` is an async () => string used the
+// first time the card expands (D1-backed works fetch their scenes on demand).
+function buildStoryCard(mainElement, { title, image, excerpt, getFullText }) {
+    const card = document.createElement('div');
+    card.className = 'story-card';
+
+    // Cover image, with a lettered placeholder if the file is missing
+    const cover = document.createElement('img');
+    cover.src = image || '';
+    cover.alt = `${title} cover`;
+    cover.loading = 'lazy';
+    cover.onerror = function() {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'cover-placeholder';
+        placeholder.textContent = title.charAt(0);
+        this.replaceWith(placeholder);
+    };
+    card.appendChild(cover);
+
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    const heading = document.createElement('h2');
+    heading.textContent = title;
+
+    const shortText = excerpt.substring(0, 150) + '...';
+    const text = document.createElement('p');
+    text.textContent = shortText;
+
+    let fullText = null;
+    const button = document.createElement('button');
+    button.textContent = 'Read More';
+    button.addEventListener('click', async () => {
+        if (fullText === null) {
+            button.disabled = true;
+            try { fullText = await getFullText(); } finally { button.disabled = false; }
+        }
+        const expanded = card.classList.toggle('expanded');
+        text.textContent = expanded ? fullText : shortText;
+        button.textContent = expanded ? 'Show Less' : 'Read More';
+    });
+
+    body.appendChild(heading);
+    body.appendChild(text);
+    body.appendChild(button);
+    card.appendChild(body);
+    mainElement.appendChild(card);
+}
+
+// Works API (D1) first; stories.json as fallback for environments without
+// a database (local Express dev, static preview).
+async function loadLibrary() {
+    const mainElement = document.getElementById('story-list');
+
+    try {
+        const resp = await fetch('/api/works');
+        if (resp.ok) {
+            const { works } = await resp.json();
+            if (works && works.length) {
+                works.forEach(work => buildStoryCard(mainElement, {
+                    title: work.title,
+                    image: work.cover_image_url,
+                    excerpt: work.excerpt || '',
+                    getFullText: async () => {
+                        const full = await fetch(`/api/works/${encodeURIComponent(work.id)}`).then(r => r.json());
+                        return (full.scenes || []).map(s => s.display_text).join('\n\n');
+                    },
+                }));
+                return;
+            }
+        }
+    } catch (error) {
+        console.warn('Works API unavailable, falling back to stories.json:', error);
+    }
+
+    const stories = await fetch('data/stories.json').then(r => r.json());
+    stories.sort((a, b) => a.id - b.id).forEach(story => buildStoryCard(mainElement, {
+        title: story.title,
+        image: story.image,
+        excerpt: story.content,
+        getFullText: async () => story.content,
+    }));
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    fetch('data/stories.json')  // Adjusted path assuming 'stories.json' is in 'public/data'
-        .then(response => response.json())
-        .then(stories => {
-            const mainElement = document.getElementById('story-list');
-            stories.sort((a, b) => a.id - b.id).forEach(story => {
-                const card = document.createElement('div');
-                card.className = 'story-card';
-
-                // Cover image, with a lettered placeholder if the file is missing
-                const cover = document.createElement('img');
-                cover.src = story.image || '';
-                cover.alt = `${story.title} cover`;
-                cover.loading = 'lazy';
-                cover.onerror = function() {
-                    const placeholder = document.createElement('div');
-                    placeholder.className = 'cover-placeholder';
-                    placeholder.textContent = story.title.charAt(0);
-                    this.replaceWith(placeholder);
-                };
-                card.appendChild(cover);
-
-                const body = document.createElement('div');
-                body.className = 'card-body';
-
-                const heading = document.createElement('h2');
-                heading.textContent = story.title;
-
-                const excerpt = story.content.substring(0, 150) + '...';
-                const text = document.createElement('p');
-                text.textContent = excerpt;
-
-                const button = document.createElement('button');
-                button.textContent = 'Read More';
-                button.addEventListener('click', () => {
-                    const expanded = card.classList.toggle('expanded');
-                    text.textContent = expanded ? story.content : excerpt;
-                    button.textContent = expanded ? 'Show Less' : 'Read More';
-                });
-
-                body.appendChild(heading);
-                body.appendChild(text);
-                body.appendChild(button);
-                card.appendChild(body);
-                mainElement.appendChild(card);
-            });
-        })
-        .catch(error => {
-            console.error('Error loading the stories:', error);
-        });
+    loadLibrary().catch(error => console.error('Error loading the stories:', error));
 });
 document.addEventListener('DOMContentLoaded', function() {
     const currentPage = window.location.pathname.split('/').pop();

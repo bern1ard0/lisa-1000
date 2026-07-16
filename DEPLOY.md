@@ -27,6 +27,8 @@ goes to lisa1000.com.
 
    Set all three production secrets:
    ```bash
+   npx wrangler d1 create lisa1000             # once; paste database_id into wrangler.jsonc
+   npx wrangler d1 migrations apply lisa1000 --remote   # schema + seed stories (docs/SCHEMA.md)
    npx wrangler secret put ANTHROPIC_API_KEY   # Claude: stories, definitions, translation
    npx wrangler secret put ELEVENLABS_API_KEY  # ElevenLabs streaming narration (Lisa & Adam voices)
    npx wrangler secret put OPENAI_API_KEY      # story images + TTS fallback

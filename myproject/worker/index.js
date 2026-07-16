@@ -9,7 +9,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
-const CLAUDE_MODEL = 'claude-haiku-4-5'; // cheapest tier; swap to 'claude-sonnet-5' or 'claude-opus-4-8' for higher quality
+const CLAUDE_MODEL = 'claude-sonnet-5'; // swap to 'claude-haiku-4-5' (cheaper) or 'claude-opus-4-8' (higher quality)
 const HIGGSFIELD_BASE = 'https://platform.higgsfield.ai';
 
 function json(data, status = 200) {

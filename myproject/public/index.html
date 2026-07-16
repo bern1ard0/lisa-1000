@@ -38,22 +38,30 @@
         </div>
     </header>
     <section class="hero">
-        <div class="star-field" aria-hidden="true">
-            <span style="top:8%; left:12%; font-size:11px; animation-delay:0.2s;">✦</span>
-            <span class="gold" style="top:18%; left:28%; font-size:8px; animation-delay:1.1s;">✦</span>
-            <span style="top:6%; left:58%; font-size:9px; animation-delay:2s;">✦</span>
-            <span style="top:22%; left:72%; font-size:12px; animation-delay:0.6s;">✦</span>
-            <span class="gold" style="top:44%; left:8%; font-size:9px; animation-delay:1.6s;">✦</span>
-            <span style="top:60%; left:20%; font-size:8px; animation-delay:2.4s;">✦</span>
-            <span style="top:38%; left:88%; font-size:10px; animation-delay:0.9s;">✦</span>
-            <span class="gold" style="top:66%; left:80%; font-size:11px; animation-delay:1.9s;">✦</span>
-            <span style="top:76%; left:44%; font-size:8px; animation-delay:0.4s;">✦</span>
-            <span style="top:12%; left:42%; font-size:8px; animation-delay:2.8s;">✦</span>
-            <span class="gold" style="top:52%; left:60%; font-size:9px; animation-delay:1.3s;">✦</span>
-            <span style="top:80%; left:64%; font-size:10px; animation-delay:2.2s;">✦</span>
+        <div id="star-field" class="star-field" aria-hidden="true">
+            <span class="star" data-depth="1.2" style="top:8%; left:12%;"><i style="font-size:11px; animation-duration:2.6s,5.5s; animation-delay:0.2s,0.4s;">✦</i></span>
+            <span class="star gold" data-depth="0.6" style="top:18%; left:28%;"><i style="font-size:8px; animation-duration:3.4s,7s; animation-delay:1.1s,1.8s;">✦</i></span>
+            <span class="star" data-depth="0.9" style="top:6%; left:58%;"><i style="font-size:9px; animation-duration:2.9s,6.2s; animation-delay:2s,0.7s;">✦</i></span>
+            <span class="star" data-depth="1.4" style="top:22%; left:72%;"><i style="font-size:13px; animation-duration:2.4s,5s; animation-delay:0.6s,2.1s;">✦</i></span>
+            <span class="star gold" data-depth="0.7" style="top:44%; left:8%;"><i style="font-size:9px; animation-duration:3.8s,7.6s; animation-delay:1.6s,0.3s;">✦</i></span>
+            <span class="star" data-depth="0.5" style="top:60%; left:20%;"><i style="font-size:8px; animation-duration:3.1s,6.8s; animation-delay:2.4s,1.2s;">✦</i></span>
+            <span class="star" data-depth="1.1" style="top:38%; left:88%;"><i style="font-size:10px; animation-duration:2.7s,5.8s; animation-delay:0.9s,2.6s;">✦</i></span>
+            <span class="star gold" data-depth="1.3" style="top:66%; left:80%;"><i style="font-size:12px; animation-duration:2.5s,5.2s; animation-delay:1.9s,0.9s;">✦</i></span>
+            <span class="star" data-depth="0.8" style="top:76%; left:44%;"><i style="font-size:8px; animation-duration:3.6s,7.2s; animation-delay:0.4s,1.5s;">✦</i></span>
+            <span class="star" data-depth="0.6" style="top:12%; left:42%;"><i style="font-size:8px; animation-duration:3.3s,6.5s; animation-delay:2.8s,0.2s;">✦</i></span>
+            <span class="star gold" data-depth="1.0" style="top:52%; left:60%;"><i style="font-size:9px; animation-duration:2.8s,6s; animation-delay:1.3s,2.3s;">✦</i></span>
+            <span class="star" data-depth="1.2" style="top:80%; left:64%;"><i style="font-size:11px; animation-duration:2.6s,5.4s; animation-delay:2.2s,1s;">✦</i></span>
+            <span class="star" data-depth="0.9" style="top:30%; left:16%;"><i style="font-size:9px; animation-duration:3s,6.4s; animation-delay:0.8s,1.7s;">✦</i></span>
+            <span class="star gold" data-depth="1.5" style="top:10%; left:82%;"><i style="font-size:12px; animation-duration:2.3s,4.8s; animation-delay:1.4s,0.6s;">✦</i></span>
+            <span class="star" data-depth="0.7" style="top:70%; left:8%;"><i style="font-size:8px; animation-duration:3.5s,7.4s; animation-delay:2.6s,2s;">✦</i></span>
+            <span class="star" data-depth="1.1" style="top:86%; left:26%;"><i style="font-size:10px; animation-duration:2.9s,5.6s; animation-delay:0.5s,1.1s;">✦</i></span>
+            <span class="star gold" data-depth="0.8" style="top:34%; left:50%;"><i style="font-size:8px; animation-duration:3.2s,6.6s; animation-delay:1.8s,0.8s;">✦</i></span>
+            <span class="star" data-depth="1.3" style="top:58%; left:92%;"><i style="font-size:11px; animation-duration:2.5s,5.1s; animation-delay:2.1s,1.4s;">✦</i></span>
         </div>
         <img src="images/covers/story_2.webp" alt="" class="hero-float left">
         <img src="images/covers/story_10.webp" alt="" class="hero-float right">
+        <img src="images/covers/story_3.webp" alt="" class="hero-float bottom-left">
+        <img src="images/covers/story_7.webp" alt="" class="hero-float bottom-right">
         <div class="hero-inner">
             <span class="hero-badge">✨ AI-powered language learning</span>
             <h1 class="hero-title">Learn a language through <span class="gradient-text">stories you'll actually love</span></h1>
@@ -135,6 +143,17 @@
             <a href="library.html" class="browse-all">Browse all stories →</a>
         </aside>
     </main>
+    <section class="key-guide">
+        <h3>🔑 Quick guide</h3>
+        <ul>
+            <li><span class="key-chip">📖 Read</span><span>Pick any story from the <a href="library.html">Library</a> — or start with the featured one above.</span></li>
+            <li><span class="key-chip">🔊 Read aloud</span><span>Choose one of six voices and listen to the story narrated.</span></li>
+            <li><span class="key-chip">🎙 Record</span><span>Narrate the story yourself and play back your recording.</span></li>
+            <li><span class="key-chip">👆 Double-click</span><span>Double-click any word for its definition and pronunciation.</span></li>
+            <li><span class="key-chip">T&nbsp;Translate</span><span>Turn on the <strong>T</strong> toggle and pick "I speak…" — then double-click words or press Translate.</span></li>
+            <li><span class="key-chip">✨ Create</span><span>Generate your own illustrated story on the <a href="create-story.html">Create Story</a> page.</span></li>
+        </ul>
+    </section>
     <footer>
         <span class="footer-brand">✦ LISA 1000</span>
         <div class="footer-links">

@@ -16,7 +16,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // OpenAI is kept for text-to-speech only (Claude does not generate audio).
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const CLAUDE_MODEL = 'claude-haiku-4-5'; // cheapest tier; swap to 'claude-sonnet-5' or 'claude-opus-4-8' for higher quality
+const CLAUDE_MODEL = 'claude-sonnet-5'; // swap to 'claude-haiku-4-5' (cheaper) or 'claude-opus-4-8' (higher quality)
 
 // Extract the plain text from a Claude response (skips thinking blocks).
 function claudeText(message) {

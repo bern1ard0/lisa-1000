@@ -478,7 +478,9 @@ export default {
         const method = request.method;
 
         try {
-            const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+            // maxRetries: the SDK retries transient failures (429 rate limit,
+            // 529 overloaded, 5xx) with exponential backoff before giving up.
+            const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 5 });
             if (method === 'POST') {
                 const body = await request.json().catch(() => ({}));
 
@@ -506,9 +508,19 @@ export default {
             return json({ error: 'Not found' }, 404);
         } catch (error) {
             console.error(`Error handling ${method} ${path}:`, error);
+            const detail = String(error?.message || error);
+            // Anthropic overload/rate-limit that survived the SDK's retries:
+            // tell the user it's temporary rather than "Internal error".
+            if (/overloaded|529|rate.?limit|429/i.test(detail)) {
+                return json({
+                    error: "Lisa's AI is very popular right now — please try again in a minute.",
+                    detail,
+                    retryable: true,
+                }, 503);
+            }
             // Surface the underlying cause so failures are debuggable from the
             // browser Network tab (no key material is ever in these messages).
-            return json({ error: 'Internal error', detail: String(error?.message || error) }, 500);
+            return json({ error: 'Internal error', detail }, 500);
         }
     },
 };

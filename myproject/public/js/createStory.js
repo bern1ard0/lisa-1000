@@ -43,33 +43,52 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+// Why the last generation failed, for the error card shown to the user.
+let lastGenerationError = '';
+
 async function generateStory(prompt) {
     console.log('Contacting story server with prompt:', prompt); // Debugging code
+    lastGenerationError = '';
 
-    try {
-        const response = await fetch('/generate-story', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ prompt: prompt })
-        });
+    // One request + one automatic retry when the server says the failure is
+    // temporary (Claude overloaded / rate limited). The backend SDK already
+    // retries with backoff, so anything reaching us here was busy for a while.
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            const response = await fetch('/generate-story', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt: prompt })
+            });
 
-        if (!response.ok) {
-            const errBody = await response.text().catch(() => '');
-            console.error('Server error body:', errBody);
-            throw new Error(`Server error ${response.status}: ${errBody}`);
+            if (!response.ok) {
+                const errBody = await response.text().catch(() => '');
+                console.error('Server error body:', errBody);
+                let parsed = {};
+                try { parsed = JSON.parse(errBody); } catch (_) { /* not JSON */ }
+                lastGenerationError = parsed.error || `The story server returned an error (${response.status}).`;
+                if (parsed.retryable && attempt === 0) {
+                    console.log('Temporary overload — retrying once in 8s...');
+                    await new Promise((r) => setTimeout(r, 8000));
+                    continue;
+                }
+                return null;
+            }
+
+            const data = await response.json();
+            console.log('Received story from server:', data.story); // Debugging code
+            console.log('Received image URL from server:', data.imageUrl); // Debugging code
+
+            return data;
+        } catch (error) {
+            console.error('Network or server error:', error);
+            lastGenerationError = 'Could not reach the story server — check your connection and try again.';
+            return null;
         }
-
-        const data = await response.json();
-        console.log('Received story from server:', data.story); // Debugging code
-        console.log('Received image URL from server:', data.imageUrl); // Debugging code
-
-        return data;
-    } catch (error) {
-        console.error('Network or server error:', error);
-        return null;
     }
+    return null;
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -192,20 +211,34 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Warn before leaving the page while a story is generating — navigating
+    // to another tab/page aborts the request and the story is lost.
+    let generationInFlight = false;
+    window.addEventListener('beforeunload', function(event) {
+        if (generationInFlight) {
+            event.preventDefault();
+            event.returnValue = 'Your story is still being created — leaving now will lose it.';
+        }
+    });
+
     // Show a staged loading indicator while the story + image generate (~20-60s)
     function startLoading(triggerButton) {
         const stages = [
             "Lisa is writing your story...",
             "Illustrating your story...",
-            "Adding the finishing touches..."
+            "Adding the finishing touches...",
+            "Still working — Lisa is being extra careful..."
         ];
         let stageIndex = 0;
+        generationInFlight = true;
         if (triggerButton) triggerButton.disabled = true;
         buttonContainer.style.display = 'none';
+        storyContainer.classList.remove('generated-story');
         storyContainer.innerHTML = `
             <div class="loading-overlay">
                 <div class="spinner"></div>
                 <p class="loading-status">${stages[0]}</p>
+                <p class="loading-hint">Please stay on this page — leaving stops the magic. ✨</p>
             </div>`;
         const timer = setInterval(() => {
             stageIndex = Math.min(stageIndex + 1, stages.length - 1);
@@ -214,13 +247,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 15000);
         return function stopLoading() {
             clearInterval(timer);
+            generationInFlight = false;
             if (triggerButton) triggerButton.disabled = false;
         };
     }
 
     function displayStory(story, imageUrl, title = 'Generated Story') {
         if (!story) {
-            storyContainer.innerHTML = '<h2>Failed to generate story</h2>';
+            storyContainer.classList.add('generated-story');
+            storyContainer.innerHTML = `
+                <h2>Couldn't create your story</h2>
+                <p>${lastGenerationError || 'Something went wrong on our side.'}</p>
+                <p>Everything you filled in is still here — just press Generate again.</p>`;
             return;
         }
         console.log('Displaying story:', story); // Debugging code

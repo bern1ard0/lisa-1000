@@ -3,11 +3,46 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(stories => {
             const mainElement = document.getElementById('story-list');
-            stories.forEach(story => {
-                const storyDiv = document.createElement('div');
-                storyDiv.className = 'story';
-                storyDiv.innerHTML = `<h2>${story.title}</h2><p>${story.content.substring(0, 150)}...</p><button onclick="readStory(${story.id})">Read More</button>`;
-                mainElement.appendChild(storyDiv);
+            stories.sort((a, b) => a.id - b.id).forEach(story => {
+                const card = document.createElement('div');
+                card.className = 'story-card';
+
+                // Cover image, with a lettered placeholder if the file is missing
+                const cover = document.createElement('img');
+                cover.src = story.image || '';
+                cover.alt = `${story.title} cover`;
+                cover.loading = 'lazy';
+                cover.onerror = function() {
+                    const placeholder = document.createElement('div');
+                    placeholder.className = 'cover-placeholder';
+                    placeholder.textContent = story.title.charAt(0);
+                    this.replaceWith(placeholder);
+                };
+                card.appendChild(cover);
+
+                const body = document.createElement('div');
+                body.className = 'card-body';
+
+                const heading = document.createElement('h2');
+                heading.textContent = story.title;
+
+                const excerpt = story.content.substring(0, 150) + '...';
+                const text = document.createElement('p');
+                text.textContent = excerpt;
+
+                const button = document.createElement('button');
+                button.textContent = 'Read More';
+                button.addEventListener('click', () => {
+                    const expanded = card.classList.toggle('expanded');
+                    text.textContent = expanded ? story.content : excerpt;
+                    button.textContent = expanded ? 'Show Less' : 'Read More';
+                });
+
+                body.appendChild(heading);
+                body.appendChild(text);
+                body.appendChild(button);
+                card.appendChild(body);
+                mainElement.appendChild(card);
             });
         })
         .catch(error => {
@@ -40,11 +75,26 @@ async function defineText(word) {
             throw new Error(`Server error: ${response.statusText}`);
         }
         const data = await response.json();
-        return data.definition;
+        return data;
     } catch (error) {
         console.error('Error getting definition:', error);
         return null;
     }
+}
+
+// Build popup HTML for a definition entry (word, phonetic, audio, meanings)
+function renderDefinition(entry) {
+    const meanings = (entry.meanings && entry.meanings.length)
+        ? entry.meanings.map(m => `<p><em>${m.partOfSpeech}</em> — ${m.definition}${m.example ? `<br><span class="def-example">"${m.example}"</span>` : ''}</p>`).join('')
+        : `<p>${(entry.definition || '').replace(/\n/g, '<br>')}</p>`;
+    const audio = entry.audioUrl
+        ? `<button class="pronounce-btn" onclick="new Audio('${entry.audioUrl}').play()">🔊 Pronounce</button>`
+        : '';
+    return `
+        <h2>${entry.word || 'Definition'}</h2>
+        ${entry.phonetic ? `<p class="phonetic">${entry.phonetic}</p>` : ''}
+        ${audio}
+        ${meanings}`;
 }
 
 // Function to translate text
@@ -81,12 +131,9 @@ async function handleDoubleClick() {
                 }
             }
         } else {
-            const definition = await defineText(selectedText);
-            if (definition) {
-                showPopup(`
-                    <h2>Definition</h2>
-                    <p>${definition}</p>
-                `);
+            const entry = await defineText(selectedText);
+            if (entry) {
+                showPopup(renderDefinition(entry));
             }
         }
     }
@@ -170,11 +217,8 @@ document.getElementById('translation-toggle').addEventListener('click', function
     console.log('Translation toggle:', this.classList.contains('active'));
 });
 
-// Event listener for translate button
-translateButton.addEventListener('click', translateStory);
-
-
-function readStory(id) {
-    // Placeholder for future expansion or interaction
-    alert('Read story with ID: ' + id);
+// Event listener for translate button (only present on some pages)
+const translateButtonEl = document.getElementById('translateButton');
+if (translateButtonEl) {
+    translateButtonEl.addEventListener('click', translateStory);
 }

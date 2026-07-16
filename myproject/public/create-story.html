@@ -30,7 +30,7 @@
                         <input type="text" id="otherLanguage" class="hidden" placeholder="Please specify your language">
                     </li>
                     <li>
-                        <div id="translation-toggle" class="translation-toggle">T</div> <!-- Translation toggle -->
+                        <div id="translation-toggle" class="translation-toggle" title="Translate mode: when on, double-clicking a word translates it into your language instead of defining it" aria-label="Toggle translate mode" role="button">T</div>
                     </li>
                 </ul>
             </nav>
@@ -51,23 +51,33 @@
             <h2>Lisa's Story</h2>
             <button id="randomStoryButton">Surprise</button>
             <button id="fineTuneButton">Fine Tune</button>
-            <div id="fineTuneOptions" style="display:none;">
+            <div id="fineTuneOptions" class="story-form" style="display:none;">
                 <h3>Fine Tune Your Story</h3>
-                <label for="genre">Genre:</label>
-                <input type="text" id="genre" name="genre"><br>
-                <label for="length">Length:</label>
-                <select id="length" name="length">
-                    <option value="very short">Very Short</option>
-                    <option value="short">Short</option>
-                    <option value="medium">Medium</option>
-                    <option value="long">Long</option>
-                </select><br>
-                <label for="characterNum">Number of Participants:</label>
-                <input type="number" id="characterNum" name="characterNum"><br>
-                <label for="emotion">Emotion (how you'd like to feel after listening):</label>
-                <input type="text" id="emotion" name="emotion"><br>
-                <label for="language">Language:</label>
-                <input type="text" id="language" name="language"><br>
+                <div class="form-row">
+                    <label for="genre">Genre:</label>
+                    <input type="text" id="genre" name="genre" placeholder="e.g. adventure, mystery">
+                </div>
+                <div class="form-row">
+                    <label for="length">Length:</label>
+                    <select id="length" name="length">
+                        <option value="very short">Very Short</option>
+                        <option value="short">Short</option>
+                        <option value="medium">Medium</option>
+                        <option value="long">Long</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label for="characterNum">Number of Participants:</label>
+                    <input type="number" id="characterNum" name="characterNum" min="1" placeholder="2">
+                </div>
+                <div class="form-row">
+                    <label for="emotion">Emotion (how you'd like to feel after listening):</label>
+                    <input type="text" id="emotion" name="emotion" placeholder="e.g. inspired, happy">
+                </div>
+                <div class="form-row">
+                    <label for="language">Language:</label>
+                    <input type="text" id="language" name="language" placeholder="e.g. English">
+                </div>
                 <button id="generateFineTunedStoryButton">Generate Story</button>
             </div>
         </section>
@@ -75,39 +85,48 @@
 
         <section id="generate-story-section" style="display:none;">
             <h2>My Story</h2>
-            <form id="generateStoryForm">
-                <label for="title">Title:</label>
-                <input type="text" id="title" name="title"><br>
-                <label for="theme">Theme:</label>
-                <input type="text" id="theme" name="theme"><br>
-                <label for="inputLanguage">Input Language:</label>
-                <select id="inputLanguage" name="inputLanguage">
-                    <option value="en">English</option>
-                    <option value="fr">French</option>
-                    <option value="es">Spanish</option>
-                    <option value="de">German</option>
-                    <option value="zh">Chinese</option>
-                    <option value="ar">Arabic</option>
-                </select><br>
-                <label for="textInput">Text Input:</label>
-                <textarea id="textInput" name="textInput"></textarea><br>
-                <label for="outputLanguage">Output Language:</label>
-                <select id="outputLanguage" name="outputLanguage">
-                    <option value="en">English</option>
-                    <option value="fr">French</option>
-                    <option value="es">Spanish</option>
-                    <option value="de">German</option>
-                    <option value="zh">Chinese</option>
-                    <option value="ar">Arabic</option>
-                </select><br>
-                <label for="music">Music:</label>
-                <input type="checkbox" id="music" name="music"><br>
-                <label for="scenery">Scenery:</label>
-                <input type="checkbox" id="scenery" name="scenery"><br>
-                <label for="video">Video:</label>
-                <input type="checkbox" id="video" name="video"><br>
-                <label for="subtitles">Subtitles:</label>
-                <input type="checkbox" id="subtitles" name="subtitles"><br>
+            <form id="generateStoryForm" class="story-form">
+                <div class="form-row">
+                    <label for="title">Title:</label>
+                    <input type="text" id="title" name="title" placeholder="Give your story a name">
+                </div>
+                <div class="form-row">
+                    <label for="theme">Theme:</label>
+                    <input type="text" id="theme" name="theme" placeholder="e.g. friendship, courage">
+                </div>
+                <div class="form-row">
+                    <label for="inputLanguage">Input Language:</label>
+                    <select id="inputLanguage" name="inputLanguage">
+                        <option value="en">English</option>
+                        <option value="fr">French</option>
+                        <option value="es">Spanish</option>
+                        <option value="de">German</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ar">Arabic</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label for="textInput">Text Input:</label>
+                    <textarea id="textInput" name="textInput" rows="4" placeholder="Ideas, characters, or a draft to build on..."></textarea>
+                </div>
+                <div class="form-row">
+                    <label for="outputLanguage">Output Language:</label>
+                    <select id="outputLanguage" name="outputLanguage">
+                        <option value="en">English</option>
+                        <option value="fr">French</option>
+                        <option value="es">Spanish</option>
+                        <option value="de">German</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ar">Arabic</option>
+                    </select>
+                </div>
+                <fieldset class="extras">
+                    <legend>Extras</legend>
+                    <label class="checkbox-row"><input type="checkbox" id="music" name="music"> Music</label>
+                    <label class="checkbox-row"><input type="checkbox" id="scenery" name="scenery"> Scenery</label>
+                    <label class="checkbox-row"><input type="checkbox" id="video" name="video"> Video</label>
+                    <label class="checkbox-row"><input type="checkbox" id="subtitles" name="subtitles"> Subtitles</label>
+                </fieldset>
                 <button type="submit">Generate Story</button>
             </form>
         </section>
@@ -127,7 +146,7 @@
             <button id="readButton">Read</button>
             <button id="translateButton">Translate</button>
             <button id="narrateButton">Narrate</button>
-            <button id="animateButton">Animate</button>
+            <button id="animateButton" class="coming-soon" disabled title="Animation is coming soon">Animate ✨</button>
         </div>
     </main>
     <script src="js/createStory.js"></script>

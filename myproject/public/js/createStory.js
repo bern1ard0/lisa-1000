@@ -47,7 +47,9 @@ async function generateStory(prompt) {
         });
 
         if (!response.ok) {
-            throw new Error(`Server error: ${response.statusText}`);
+            const errBody = await response.text().catch(() => '');
+            console.error('Server error body:', errBody);
+            throw new Error(`Server error ${response.status}: ${errBody}`);
         }
 
         const data = await response.json();

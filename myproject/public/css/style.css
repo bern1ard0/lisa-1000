@@ -315,10 +315,12 @@ header { background: transparent; }
     z-index: 1;
 }
 
-.hero-float.left { --tilt: -7deg; left: 3%; top: 20%; }
-.hero-float.right { --tilt: 6deg; right: 3%; top: 30%; animation-duration: 7s; animation-delay: 1s; }
-.hero-float.bottom-left { --tilt: 5deg; left: 9%; top: 68%; width: 150px; animation-duration: 8s; animation-delay: 0.5s; }
-.hero-float.bottom-right { --tilt: -5deg; right: 9%; top: 70%; width: 150px; animation-duration: 6.5s; animation-delay: 1.6s; }
+.hero-float.left { --tilt: -7deg; left: 3%; top: 18%; }
+.hero-float.right { --tilt: 6deg; right: 3%; top: 26%; animation-duration: 7s; animation-delay: 1s; }
+.hero-float.bottom-left { --tilt: 5deg; left: 10%; top: 68%; width: 150px; animation-duration: 8s; animation-delay: 0.5s; }
+.hero-float.bottom-right { --tilt: -5deg; right: 10%; top: 70%; width: 150px; animation-duration: 6.5s; animation-delay: 1.6s; }
+.hero-float.mid-left { --tilt: 4deg; left: -24px; top: 44%; width: 120px; opacity: 0.55; animation-duration: 9s; animation-delay: 2.2s; }
+.hero-float.mid-right { --tilt: -4deg; right: -24px; top: 48%; width: 120px; opacity: 0.55; animation-duration: 8.5s; animation-delay: 0.8s; }
 
 .star-field {
     position: absolute;
@@ -337,6 +339,7 @@ header { background: transparent; }
     font-style: normal;
     display: inline-block;
     color: var(--lavender);
+    text-shadow: 0 0 6px currentColor, 0 0 16px currentColor;
     animation-name: twinkle, floaty;
     animation-iteration-count: infinite, infinite;
     animation-timing-function: ease-in-out, ease-in-out;
@@ -346,7 +349,8 @@ header { background: transparent; }
 
 /* On smaller screens keep two covers, faded behind the hero text */
 @media (max-width: 1240px) {
-    .hero-float.bottom-left, .hero-float.bottom-right { display: none; }
+    .hero-float.bottom-left, .hero-float.bottom-right,
+    .hero-float.mid-left, .hero-float.mid-right { display: none; }
 
     .hero-float.left, .hero-float.right {
         z-index: 0;
@@ -360,10 +364,14 @@ header { background: transparent; }
 
 /* ---------- Page header (Library / Create Story) ---------- */
 .page-header {
-    padding: 64px 24px 40px;
+    position: relative;
+    overflow: hidden;
+    padding: 64px 24px 46px;
     text-align: center;
     background: radial-gradient(ellipse 60% 70% at 50% -10%, rgba(109, 40, 217, 0.45), transparent 70%);
 }
+
+.page-header-inner { position: relative; z-index: 2; }
 
 .page-header h1 {
     margin: 0 0 12px;
@@ -374,6 +382,25 @@ header { background: transparent; }
     margin: 0;
     color: var(--text-muted);
     font-size: 17px;
+}
+
+.header-float {
+    position: absolute;
+    width: 150px;
+    border-radius: 12px;
+    opacity: 0.45;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    animation: floaty-lg 7s ease-in-out infinite;
+    z-index: 1;
+}
+
+.header-float.left { --tilt: -6deg; left: 6%; top: 26%; }
+.header-float.right { --tilt: 5deg; right: 6%; top: 34%; animation-duration: 8s; animation-delay: 1.2s; }
+
+@media (max-width: 900px) {
+    .header-float { width: 110px; opacity: 0.25; }
+    .header-float.left { left: -24px; }
+    .header-float.right { right: -24px; }
 }
 
 /* ---------- Feature cards ---------- */

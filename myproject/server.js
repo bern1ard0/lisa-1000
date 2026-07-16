@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { Readable } from 'node:stream';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { higgsfield } from '@higgsfield/client/v2';
@@ -125,7 +126,48 @@ app.post('/translate', async (req, res) => {
 });
 
 
-// Endpoint for generating speech (OpenAI TTS — Claude does not do audio)
+// ---------- Text-to-speech (ElevenLabs streaming, OpenAI fallback) ----------
+
+// Cloned narrator voices. The client normally sends a concrete voice_id;
+// these cover named keys and legacy OpenAI voice names still in the wild.
+const ELEVEN_VOICES = { lisa: 'kv1Qe4fUcVPEC2ZisX5i', adam: 'IRHApOXLvnW57QJPQH2P' };
+
+function resolveElevenVoiceId(voice) {
+    if (!voice) return ELEVEN_VOICES.lisa;
+    if (ELEVEN_VOICES[voice]) return ELEVEN_VOICES[voice];
+    if (/^[a-zA-Z0-9]{16,}$/.test(voice)) return voice; // already a voice_id
+    return ['onyx', 'echo', 'adam'].includes(voice) ? ELEVEN_VOICES.adam : ELEVEN_VOICES.lisa;
+}
+
+// Emotional delivery cues like [whispers]/[excited] need the v3 model;
+// plain text uses multilingual v2 (same voice can read any language).
+function elevenModelFor(text) {
+    return /\[[^\]\n]{2,30}\]/.test(text) ? 'eleven_v3' : 'eleven_multilingual_v2';
+}
+
+// Stream ElevenLabs audio straight through to the client so playback can
+// start before synthesis finishes. eleven_multilingual_v2 reads any language
+// with the same voice, so translated stories keep their narrator.
+async function streamElevenLabs(res, text, voice) {
+    const voiceId = resolveElevenVoiceId(voice);
+    const resp = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_128`,
+        {
+            method: 'POST',
+            headers: {
+                'xi-api-key': process.env.ELEVENLABS_API_KEY,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text, model_id: elevenModelFor(text) }),
+        }
+    );
+    if (!resp.ok) {
+        throw new Error(`ElevenLabs TTS failed (${resp.status}): ${await resp.text()}`);
+    }
+    res.writeHead(200, { 'Content-Type': 'audio/mpeg' });
+    Readable.fromWeb(resp.body).pipe(res);
+}
+
 async function generateSpeech(req, res) {
     const { text, voice } = req.body;
 
@@ -133,11 +175,24 @@ async function generateSpeech(req, res) {
         return res.status(400).send({ error: 'No text provided' });
     }
 
+    if (process.env.ELEVENLABS_API_KEY) {
+        try {
+            return await streamElevenLabs(res, text, voice);
+        } catch (error) {
+            console.error('ElevenLabs failed, falling back to OpenAI TTS:', error.message);
+            if (res.headersSent) return; // stream already started; nothing to salvage
+        }
+    }
+
     try {
+        // Fallback: OpenAI TTS (non-streaming). Strip emotional cues (OpenAI
+        // would read them out) and map voices onto the closest equivalents.
+        const plain = text.replace(/\[[^\]\n]{2,30}\]\s*/g, '');
+        const openaiVoice = ['adam', 'onyx', 'echo', ELEVEN_VOICES.adam].includes(voice) ? 'onyx' : 'nova';
         const mp3 = await openai.audio.speech.create({
             model: 'tts-1',
-            voice: voice || 'nova',
-            input: text,
+            voice: /^(alloy|echo|fable|onyx|nova|shimmer)$/.test(voice || '') ? voice : openaiVoice,
+            input: plain,
         });
 
         const buffer = Buffer.from(await mp3.arrayBuffer());
@@ -189,15 +244,21 @@ app.post('/generate-story', async (req, res) => {
         const message = await anthropic.messages.create({
             model: CLAUDE_MODEL,
             max_tokens: 8192,
-            system: 'You are a helpful assistant designed to write short stories and suitable image prompts in plain text format: story|imagePrompt. Output exactly one "|" separating the story from the image prompt, and nothing else.',
+            system: 'You are a helpful assistant designed to write short stories. Output plain text in exactly this format: story|narration|imagePrompt. '
+                + 'The story is the clean text shown to the reader. '
+                + 'The narration is the SAME story with inline emotional delivery cues in square brackets placed before the phrases they affect — e.g. [warmly], [excited], [whispers], [sighs], [laughs] — for an expressive text-to-speech narrator. '
+                + 'The imagePrompt is a highly detailed illustration prompt for the story. '
+                + 'Output exactly two "|" characters separating the three parts, and nothing else.',
             messages: [
                 { role: 'user', content: prompt }
             ]
         });
 
-        const [story = '', imagePrompt = ''] = claudeText(message)
-            .split('|')
-            .map((part) => part.trim());
+        const parts = claudeText(message).split('|').map((part) => part.trim());
+        // Expected: [story, narration, imagePrompt] — tolerate a missing narration part.
+        const story = parts[0] || '';
+        const narration = parts.length >= 3 ? parts[1] : story;
+        const imagePrompt = parts[parts.length - 1] || '';
 
         // Image via OpenAI GPT Image (returns base64 -> served as a data URL).
         // To switch back to Higgsfield Soul (needs platform.higgsfield.ai keys):
@@ -208,7 +269,7 @@ app.post('/generate-story', async (req, res) => {
             size: '1024x1024',
         });
 
-        res.json({ story, imageUrl: `data:image/png;base64,${imageResponse.data[0].b64_json}` });
+        res.json({ story, narration, imageUrl: `data:image/png;base64,${imageResponse.data[0].b64_json}` });
     } catch (error) {
         console.error('Error generating story and image:', error);
         res.status(500).send({ error: 'Failed to generate story and image' });

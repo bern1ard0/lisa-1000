@@ -15,7 +15,7 @@ LISA 1000 is an AI-aided language learning tool that uses storytelling to help u
 
 ## Features
 
-- **Text to Speech**: Via OpenAI's TTS API + Choice of voice.
+- **Streaming Text to Speech**: ElevenLabs streaming narration with cloned voices (Lisa & Adam) and emotional delivery cues; OpenAI TTS as fallback.
 - **Speech to Text Synthesis**: Webkit speech recognition to capture user narration.
 - **Claude-Powered Stories, Definitions & Translation**: Story generation, word definitions, and translation are handled by Anthropic's Claude API (Claude Opus 4.8).
 - **Higgsfield Soul Image Generation**: Generate images to accompany your stories via the Higgsfield API.
@@ -48,7 +48,8 @@ To get started with Lisa 1000, follow these steps:
       ```plaintext
       ANTHROPIC_API_KEY=your_anthropic_api_key      # Claude: stories, definitions, translation
       HF_CREDENTIALS=your_key_id:your_key_secret    # Higgsfield: image generation
-      OPENAI_API_KEY=your_openai_api_key            # OpenAI: text-to-speech only
+      ELEVENLABS_API_KEY=your_elevenlabs_api_key    # ElevenLabs: streaming narration (Lisa & Adam voices)
+      OPENAI_API_KEY=your_openai_api_key            # OpenAI: story images + TTS fallback
       ```
 
 5. **Start the server**:

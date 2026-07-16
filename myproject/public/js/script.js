@@ -85,22 +85,6 @@ function cycleText() {
 
 window.onload = cycleText;
 
-// Parallax: stars drift away from the cursor, scaled by their depth
-document.addEventListener('DOMContentLoaded', function() {
-    const starField = document.getElementById('star-field');
-    if (!starField) return;
-    const stars = starField.querySelectorAll('[data-depth]');
-    window.addEventListener('mousemove', function(e) {
-        const r = starField.getBoundingClientRect();
-        const dx = (e.clientX - (r.left + r.width / 2)) / r.width;
-        const dy = (e.clientY - (r.top + r.height / 2)) / r.height;
-        stars.forEach(star => {
-            const depth = parseFloat(star.getAttribute('data-depth'));
-            star.style.transform = `translate(${(dx * depth * -26).toFixed(1)}px, ${(dy * depth * -18).toFixed(1)}px)`;
-        });
-    });
-});
-
 // Small toast-style notice (SweetAlert2 when available, alert() otherwise)
 function notifyUser(title, text) {
     if (window.Swal) {
@@ -110,32 +94,18 @@ function notifyUser(title, text) {
     }
 }
 
-// Function to read the story aloud
-async function readStoryAloud(text, voice) {
+// Read the story aloud — streamed from ElevenLabs, voice picked from the
+// language bank so a translated story is narrated in its own language.
+async function readStoryAloud(text, voiceKey) {
     try {
-        const response = await fetch('/generate-speech', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ text: text, voice: voice }) // Pass the voice to the server
-        });
-
-        if (response.ok) {
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            audio.play();
-        } else {
-            throw new Error('Network response was not ok.');
-        }
+        await streamSpeech(text, voiceKey, window.currentStoryLanguage);
     } catch (error) {
         console.error('Error reading story aloud:', error);
     }
 }
 
 
-document.getElementById('readButton').addEventListener('click', function() {
+document.getElementById('readButton').addEventListener('click', async function() {
     // Get the title and content of the story
     const title = document.getElementById('story-title').textContent;
     const content = document.getElementById('story-content').textContent;
@@ -145,9 +115,15 @@ document.getElementById('readButton').addEventListener('click', function() {
 
     // Get the selected voice
     const selectedVoice = document.getElementById('voiceDropdown').value;
-    
+
     if (selectedVoice) {
-        readStoryAloud(text, selectedVoice);
+        const btn = this;
+        btn.disabled = true;
+        try {
+            await readStoryAloud(text, selectedVoice);
+        } finally {
+            btn.disabled = false;
+        }
     } else {
         console.log('No voice selected.');
     }
@@ -321,6 +297,8 @@ async function translateStory() {
             const translatedStory = await translateText(storyText, targetLanguage);
             if (translatedStory) {
                 storyContentElement.textContent = translatedStory;  // Update only the text content
+                // Narration follows the story's language from here on
+                window.currentStoryLanguage = targetLanguage;
             }
         } finally {
             if (btn) btn.disabled = false;

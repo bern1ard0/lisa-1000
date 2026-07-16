@@ -37,8 +37,13 @@
             </nav>
         </div>
         <div class="page-header">
-            <h1>Create a story</h1>
-            <p>Tell us the spark — we'll turn it into an illustrated, narrated tale.</p>
+            <div class="star-field" data-stars="22" aria-hidden="true"></div>
+            <img src="images/covers/story_1.webp" alt="" class="header-float left">
+            <img src="images/covers/story_6.webp" alt="" class="header-float right">
+            <div class="page-header-inner">
+                <h1>Create a story</h1>
+                <p>Tell us the spark — we'll turn it into an illustrated, narrated tale.</p>
+            </div>
         </div>
     </header>
     <main class="create-main">
@@ -137,12 +142,9 @@
         <div id="button-container" style="display: none;">
             <label for="voiceDropdown">Voice:</label>
             <select id="voiceDropdown">
-                <option value="nova" selected>Lisa</option>
-                <option value="alloy">Andi</option>
-                <option value="echo">Dave</option>
-                <option value="fable">Hannah</option>
-                <option value="onyx">Roy</option>
-                <option value="shimmer">Emma</option>
+                <option value="lisa" selected>Lisa</option>
+                <option value="adam">Adam</option>
+                <option value="yours" disabled>🎤 Your Voice — sign up (soon)</option>
             </select>
             <button id="readButton">🔊 Read</button>
             <button id="translateButton" class="ghost">🌍 Translate</button>
@@ -158,6 +160,8 @@
             <a href="library.html">Library</a>
         </div>
     </footer>
+    <script src="js/stars.js"></script>
+    <script src="js/tts.js"></script>
     <script src="js/createStory.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </body>

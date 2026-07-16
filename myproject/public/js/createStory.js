@@ -96,6 +96,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Story text annotated with [emotional cues] — used for narration only,
     // never displayed. Cleared on translation (cues belong to the original).
     let currentNarration = null;
+    // Everything needed to persist the on-screen story via POST /api/works.
+    let currentStory = null;
 
     // Ensure the default voice is set to "Lisa" in the dropdown
     voiceDropdown.value = 'lisa';
@@ -103,6 +105,91 @@ document.addEventListener('DOMContentLoaded', function() {
     voiceDropdown.addEventListener('change', function() {
         selectedVoice = voiceDropdown.value;
         console.log(`Selected voice: ${selectedVoice}`);
+    });
+
+    function setCurrentStory(title, genre, language, storyData) {
+        currentStory = {
+            title: title,
+            genre: genre || null,
+            language: language || 'en',
+            story: storyData.story,
+            narration: storyData.narration || null,
+            imageUrl: storyData.imageUrl || null,
+        };
+        const saveButton = document.getElementById('saveButton');
+        saveButton.disabled = false;
+        saveButton.textContent = '💾 Save to Library';
+    }
+
+    // Split a story into paragraph scenes; pair narration paragraphs with
+    // them when the counts line up, otherwise keep all cues on scene 0.
+    function storyToScenes(story, narration) {
+        const paras = story.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+        const narrParas = narration
+            ? narration.split(/\n+/).map((p) => p.trim()).filter(Boolean)
+            : [];
+        const aligned = narrParas.length === paras.length;
+        return paras.map((p, i) => ({
+            display_text: p,
+            narration_text: aligned ? narrParas[i] : (i === 0 ? narration : null),
+        }));
+    }
+
+    document.getElementById('saveButton').addEventListener('click', async function() {
+        if (!currentStory) return;
+        const saveButton = this;
+
+        let visibility = 'public';
+        if (window.Swal) {
+            const choice = await Swal.fire({
+                title: 'Save to Library',
+                text: 'Who should see this story?',
+                input: 'radio',
+                inputOptions: { public: '🌍 Everyone', unlisted: '🔗 Only people with the link' },
+                inputValue: 'public',
+                showCancelButton: true,
+                confirmButtonText: 'Save',
+                confirmButtonColor: '#8B5CF6',
+            });
+            if (!choice.isConfirmed) return;
+            visibility = choice.value || 'public';
+        } else if (!confirm('Save this story to the public library?')) {
+            return;
+        }
+
+        saveButton.disabled = true;
+        saveButton.textContent = 'Saving...';
+        try {
+            const resp = await fetch('/api/works', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    kind: 'story',
+                    title: currentStory.title,
+                    genre: currentStory.genre,
+                    language: currentStory.language,
+                    visibility: visibility,
+                    scenes: storyToScenes(currentStory.story, currentStory.narration),
+                    cover_image_url: currentStory.imageUrl,
+                }),
+            });
+            if (!resp.ok) {
+                const detail = await resp.json().catch(() => ({}));
+                throw new Error(detail.error || `Save failed (${resp.status})`);
+            }
+            saveButton.textContent = '✓ Saved';
+            notifyUser(
+                'Saved to Library',
+                visibility === 'public'
+                    ? 'Your story is now in the Library for everyone to read.'
+                    : 'Saved! Only people with the link can view it (share pages coming soon).'
+            );
+        } catch (error) {
+            console.error('Error saving story:', error);
+            saveButton.disabled = false;
+            saveButton.textContent = '💾 Save to Library';
+            notifyUser('Could not save', String(error.message || error));
+        }
     });
 
     // Show a staged loading indicator while the story + image generate (~20-60s)
@@ -177,6 +264,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (storyData) {
             displayStory(storyData.story, storyData.imageUrl, `Generated ${randomGenre} Story`);
             currentNarration = storyData.narration || null;
+            setCurrentStory(`Generated ${randomGenre} Story`, randomGenre, 'en', storyData);
             buttonContainer.style.display = 'flex';
         } else {
             displayStory(null);
@@ -203,6 +291,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (storyData) {
             displayStory(storyData.story, storyData.imageUrl, `Generated ${genre} Story`);
             currentNarration = storyData.narration || null;
+            setCurrentStory(`Generated ${genre} Story`, genre, 'en', storyData);
             buttonContainer.style.display = 'flex';
         } else {
             displayStory(null);
@@ -232,6 +321,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (storyData) {
             displayStory(storyData.story, storyData.imageUrl, title);
             currentNarration = storyData.narration || null;
+            setCurrentStory(title, theme, outputLanguage, storyData);
             buttonContainer.style.display = 'flex';
             // Narrate in the language the story was generated in
             window.currentStoryLanguage = outputLanguage;
@@ -274,6 +364,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     // the cue-annotated copy belonged to the original language.
                     window.currentStoryLanguage = targetLanguage;
                     currentNarration = null;
+                    if (currentStory) {
+                        currentStory.story = translatedStory;
+                        currentStory.narration = null;
+                        currentStory.language = targetLanguage;
+                    }
                 }
             } finally {
                 translateButton.disabled = false;

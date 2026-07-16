@@ -342,6 +342,93 @@ async function handleGetWork(env, id) {
     });
 }
 
+// POST /api/works — persist a generated story into the library.
+// Pre-auth, works are owned by the 'guest' system user; the client offers
+// 'public' or 'unlisted'. 'private' arrives with accounts (a private guest
+// work would be orphaned — nobody could ever retrieve it).
+async function handleCreateWork(env, body) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+
+    const {
+        kind = 'story',
+        title,
+        genre = null,
+        language = 'en',
+        length = null,
+        visibility = 'public',
+        emotions = [],
+        scenes = [],
+        cover_image_url = null,
+    } = body || {};
+
+    if (kind !== 'story') return json({ error: "Only kind 'story' can be saved for now" }, 400);
+    if (typeof title !== 'string' || !title.trim()) return json({ error: 'A title is required' }, 400);
+    if (!['public', 'unlisted'].includes(visibility)) {
+        return json({ error: "visibility must be 'public' or 'unlisted' (private works arrive with accounts)" }, 400);
+    }
+    if (!Array.isArray(scenes) || scenes.length === 0) return json({ error: 'At least one scene is required' }, 400);
+    if (scenes.length > 50) return json({ error: 'Too many scenes (max 50)' }, 400);
+    for (const s of scenes) {
+        if (!s || typeof s.display_text !== 'string' || !s.display_text.trim()) {
+            return json({ error: 'Every scene needs display_text' }, 400);
+        }
+        if (s.display_text.length > 10000 || (s.narration_text || '').length > 12000) {
+            return json({ error: 'Scene text too long' }, 400);
+        }
+    }
+
+    // Only persist real URLs / static paths. Generated covers arrive as
+    // multi-MB base64 data URLs — storing those in D1 rows is the expensive
+    // mistake; they get an R2 upload in a follow-up and a placeholder for now.
+    const keepUrl = (u) =>
+        typeof u === 'string' && (/^https?:\/\//.test(u) || u.startsWith('images/')) ? u : null;
+
+    const known = new Set(
+        (await env.DB.prepare('SELECT name FROM emotions').all()).results.map((e) => e.name)
+    );
+    const emotionTags = [...new Set(emotions)].filter((e) => known.has(e));
+
+    const workId = `w_${crypto.randomUUID()}`;
+    const now = Math.floor(Date.now() / 1000);
+    const lengths = ['very_short', 'short', 'medium', 'long'];
+
+    const statements = [
+        env.DB.prepare(
+            `INSERT INTO works (id, owner_id, kind, title, genre, language, length, source, visibility, cover_image_url, created_at)
+             VALUES (?, 'guest', 'story', ?, ?, ?, ?, 'user', ?, ?, ?)`
+        ).bind(
+            workId,
+            title.trim().slice(0, 200),
+            genre ? String(genre).trim().slice(0, 40).toLowerCase() : null,
+            String(language).slice(0, 10),
+            lengths.includes(length) ? length : null,
+            visibility,
+            keepUrl(cover_image_url),
+            now
+        ),
+        ...scenes.map((s, i) =>
+            env.DB.prepare(
+                `INSERT INTO scenes (id, work_id, idx, display_text, narration_text, image_prompt, image_url)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`
+            ).bind(
+                `sc_${crypto.randomUUID()}`,
+                workId,
+                i,
+                s.display_text.trim(),
+                s.narration_text ? String(s.narration_text).trim() : null,
+                s.image_prompt ? String(s.image_prompt).slice(0, 2000) : null,
+                keepUrl(s.image_url)
+            )
+        ),
+        ...emotionTags.map((e) =>
+            env.DB.prepare('INSERT INTO work_emotions (work_id, emotion) VALUES (?, ?)').bind(workId, e)
+        ),
+    ];
+
+    await env.DB.batch(statements);
+    return json({ id: workId, visibility }, 201);
+}
+
 export default {
     async fetch(request, env) {
         const url = new URL(request.url);
@@ -359,6 +446,7 @@ export default {
                     return await handleSpeech(env, body);
                 }
                 if (path === '/generate-story') return await handleGenerateStory(env, anthropic, body);
+                if (path === '/api/works') return await handleCreateWork(env, body);
             }
 
             if (method === 'GET') {

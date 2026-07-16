@@ -103,6 +103,10 @@ To get started with Lisa 1000, follow these steps:
   - Higgsfield API (Soul) for image generation
   - OpenAI API for text-to-speech
 
+## Performance Note
+
+The 10 story cover images in `myproject/public/images/covers/` are ~2 MB PNGs each (~20 MB if a visitor scrolls the full library). They are lazy-loaded, so only on-screen covers are fetched, but before public launch they should be converted to WebP (~150 KB each) or served through an image CDN.
+
 ## Course Project Reflection
 
 ### Expansive Design

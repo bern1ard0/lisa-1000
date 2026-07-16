@@ -9,7 +9,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
-const CLAUDE_MODEL = 'claude-opus-4-8';
+const CLAUDE_MODEL = 'claude-haiku-4-5'; // cheapest tier; swap to 'claude-sonnet-5' or 'claude-opus-4-8' for higher quality
 const HIGGSFIELD_BASE = 'https://platform.higgsfield.ai';
 
 function json(data, status = 200) {
@@ -127,7 +127,8 @@ async function handleSpeech(env, body) {
     });
 }
 
-// OpenAI DALL-E 3 text-to-image (current image provider).
+// OpenAI GPT Image text-to-image (current image provider).
+// GPT Image models return base64, not a hosted URL, so we hand back a data URL.
 async function generateIllustrationOpenAI(env, prompt) {
     const resp = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
@@ -135,15 +136,15 @@ async function generateIllustrationOpenAI(env, prompt) {
             'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: '1024x1024' }),
+        body: JSON.stringify({ model: 'gpt-image-2', prompt, size: '1024x1024' }),
     });
     if (!resp.ok) {
         throw new Error(`OpenAI image generation failed (${resp.status}): ${await resp.text()}`);
     }
     const data = await resp.json();
-    const url = data.data?.[0]?.url;
-    if (!url) throw new Error('OpenAI image generation returned no URL');
-    return url;
+    const b64 = data.data?.[0]?.b64_json;
+    if (!b64) throw new Error('OpenAI image generation returned no image data');
+    return `data:image/png;base64,${b64}`;
 }
 
 // Higgsfield Soul text-to-image via REST: submit, then poll to completion.
@@ -190,7 +191,6 @@ async function handleGenerateStory(env, anthropic, body) {
     const message = await anthropic.messages.create({
         model: CLAUDE_MODEL,
         max_tokens: 8192,
-        thinking: { type: 'adaptive' },
         system: 'You are a helpful assistant designed to write short stories and suitable image prompts in plain text format: story|imagePrompt. Output exactly one "|" separating the story from the image prompt, and nothing else.',
         messages: [{ role: 'user', content: prompt }],
     });

@@ -16,7 +16,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // OpenAI is kept for text-to-speech only (Claude does not generate audio).
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const CLAUDE_MODEL = 'claude-opus-4-8';
+const CLAUDE_MODEL = 'claude-haiku-4-5'; // cheapest tier; swap to 'claude-sonnet-5' or 'claude-opus-4-8' for higher quality
 
 // Extract the plain text from a Claude response (skips thinking blocks).
 function claudeText(message) {
@@ -189,7 +189,6 @@ app.post('/generate-story', async (req, res) => {
         const message = await anthropic.messages.create({
             model: CLAUDE_MODEL,
             max_tokens: 8192,
-            thinking: { type: 'adaptive' },
             system: 'You are a helpful assistant designed to write short stories and suitable image prompts in plain text format: story|imagePrompt. Output exactly one "|" separating the story from the image prompt, and nothing else.',
             messages: [
                 { role: 'user', content: prompt }
@@ -200,17 +199,16 @@ app.post('/generate-story', async (req, res) => {
             .split('|')
             .map((part) => part.trim());
 
-        // Image via OpenAI DALL-E 3 for now. To switch back to Higgsfield Soul
-        // (needs platform.higgsfield.ai developer keys in HF_CREDENTIALS):
+        // Image via OpenAI GPT Image (returns base64 -> served as a data URL).
+        // To switch back to Higgsfield Soul (needs platform.higgsfield.ai keys):
         // higgsfield.subscribe('/v1/text2image/soul', { input: { prompt, ... }, withPolling: true })
         const imageResponse = await openai.images.generate({
-            model: 'dall-e-3',
+            model: 'gpt-image-2',
             prompt: (imagePrompt || story).substring(0, 1000),
-            n: 1,
             size: '1024x1024',
         });
 
-        res.json({ story, imageUrl: imageResponse.data[0].url });
+        res.json({ story, imageUrl: `data:image/png;base64,${imageResponse.data[0].b64_json}` });
     } catch (error) {
         console.error('Error generating story and image:', error);
         res.status(500).send({ error: 'Failed to generate story and image' });

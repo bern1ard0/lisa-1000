@@ -20,7 +20,9 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetr
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const CLAUDE_MODEL = 'claude-sonnet-5'; // swap to 'claude-haiku-4-5' (cheaper) or 'claude-opus-4-8' (higher quality)
-const OPENAI_TEXT_MODEL = 'gpt-4o'; // fallback only, when Claude is down — swap to 'gpt-4o-mini' for a cheaper (lower quality) fallback
+// Primary text model: OpenAI's best value tier (strong quality, low cost).
+// Swap to 'gpt-5' for maximum quality or 'gpt-5-nano' for minimum cost.
+const OPENAI_TEXT_MODEL = 'gpt-5-mini';
 
 // Extract the plain text from a Claude response (skips thinking blocks).
 function claudeText(message) {
@@ -35,15 +37,16 @@ function claudeText(message) {
     return text;
 }
 
-// ---------- Claude with an OpenAI fallback ----------
-// The rule is simple: if Anthropic isn't working — for any reason — use
-// OpenAI. The Anthropic SDK retries transient failures first (maxRetries: 5
-// above); anything that still fails switches provider.
+// ---------- OpenAI primary with a Claude fallback ----------
+// OpenAI (gpt-5-mini) serves all text generation; if it fails — for any
+// reason — the same prompt runs against Claude instead. Two independent
+// providers means one being down never stops a story.
 
 async function openaiChatText(system, prompt, maxTokens) {
     const completion = await openai.chat.completions.create({
         model: OPENAI_TEXT_MODEL,
-        max_tokens: maxTokens,
+        // GPT-5 family expects max_completion_tokens (max_tokens is rejected)
+        max_completion_tokens: maxTokens,
         messages: [
             { role: 'system', content: system },
             { role: 'user', content: prompt },
@@ -54,25 +57,59 @@ async function openaiChatText(system, prompt, maxTokens) {
     return text;
 }
 
-// Try Claude; if it fails for any reason and an OpenAI key is configured,
-// run the same prompt against OpenAI instead.
+async function claudeChatText(system, prompt, maxTokens) {
+    const message = await anthropic.messages.create({
+        model: CLAUDE_MODEL,
+        max_tokens: maxTokens,
+        system,
+        messages: [{ role: 'user', content: prompt }],
+    });
+    return claudeText(message);
+}
+
+// OpenAI first; on any OpenAI failure run the same prompt against Claude.
+// With no OpenAI key configured at all, Claude serves alone.
 async function generateText({ system, prompt, maxTokens }) {
-    try {
-        const message = await anthropic.messages.create({
-            model: CLAUDE_MODEL,
-            max_tokens: maxTokens,
-            system,
-            messages: [{ role: 'user', content: prompt }],
-        });
-        return { text: claudeText(message), provider: 'claude' };
-    } catch (error) {
-        if (!process.env.OPENAI_API_KEY) throw error;
-        // Still logged so a config problem (e.g. bad Anthropic key) is
-        // visible in the logs even while OpenAI keeps the site alive.
-        console.error('Claude unavailable, falling back to OpenAI:', error.message);
-        const text = await openaiChatText(system, prompt, maxTokens);
-        return { text, provider: 'openai' };
+    if (!process.env.OPENAI_API_KEY) {
+        return { text: await claudeChatText(system, prompt, maxTokens), provider: 'claude' };
     }
+    try {
+        return { text: await openaiChatText(system, prompt, maxTokens), provider: 'openai' };
+    } catch (error) {
+        if (!process.env.ANTHROPIC_API_KEY) throw error;
+        // Logged so a config problem (e.g. bad OpenAI key) stays visible in
+        // the logs even while Claude keeps the site alive.
+        console.error('OpenAI unavailable, falling back to Claude:', error.message);
+        return { text: await claudeChatText(system, prompt, maxTokens), provider: 'claude' };
+    }
+}
+
+// Split a title|story|narration|imagePrompt response, tolerating models that
+// drop parts. The story is always the longest early part — this is what
+// prevents a title from ever being shown as the story body again.
+function parseStoryParts(text) {
+    const parts = text.split('|').map((part) => part.trim()).filter(Boolean);
+    let title = '', story = '', narration = '', imagePrompt = '';
+    if (parts.length >= 4) {
+        [title, story, narration] = parts;
+        imagePrompt = parts[parts.length - 1];
+    } else if (parts.length === 3) {
+        // Could be title|story|imagePrompt or story|narration|imagePrompt.
+        // A title is short; a story isn't. Decide by length.
+        if (parts[0].length < 80 && parts[1].length > parts[0].length * 2) {
+            [title, story, imagePrompt] = parts;
+        } else {
+            [story, narration, imagePrompt] = parts;
+        }
+    } else if (parts.length === 2) {
+        [story, imagePrompt] = parts;
+    } else {
+        story = parts[0] || '';
+    }
+    // Strip stray labels some models prepend despite instructions
+    title = title.replace(/^title\s*:\s*/i, '').replace(/^["']|["']$/g, '');
+    story = story.replace(/^story\s*:\s*/i, '');
+    return { title, story, narration: narration || story, imagePrompt };
 }
 
 
@@ -276,20 +313,17 @@ app.post('/generate-story', async (req, res) => {
     }
     try {
         const { text } = await generateText({
-            system: 'You are a helpful assistant designed to write short stories. Output plain text in exactly this format: story|narration|imagePrompt. '
-                + 'The story is the clean text shown to the reader. '
+            system: 'You are a helpful assistant designed to write short stories. Output plain text in exactly this format: title|story|narration|imagePrompt. '
+                + 'The title is a short, evocative story title (a few words, no quotes). '
+                + 'The story is the clean text shown to the reader. It must NOT repeat the title. '
                 + 'The narration is the SAME story with inline emotional delivery cues in square brackets placed before the phrases they affect — e.g. [warmly], [excited], [whispers], [sighs], [laughs] — for an expressive text-to-speech narrator. '
                 + 'The imagePrompt is a highly detailed illustration prompt for the story. '
-                + 'Output exactly two "|" characters separating the three parts, and nothing else.',
+                + 'Output exactly three "|" characters separating the four parts, and nothing else — no labels, no markdown.',
             prompt,
             maxTokens: 8192,
         });
 
-        const parts = text.split('|').map((part) => part.trim());
-        // Expected: [story, narration, imagePrompt] — tolerate a missing narration part.
-        const story = parts[0] || '';
-        const narration = parts.length >= 3 ? parts[1] : story;
-        const imagePrompt = parts[parts.length - 1] || '';
+        const { title, story, narration, imagePrompt } = parseStoryParts(text);
 
         // Image via OpenAI GPT Image (returns base64 -> served as a data URL).
         // To switch back to Higgsfield Soul (needs platform.higgsfield.ai keys):
@@ -300,7 +334,7 @@ app.post('/generate-story', async (req, res) => {
             size: '1024x1024',
         });
 
-        res.json({ story, narration, imageUrl: `data:image/png;base64,${imageResponse.data[0].b64_json}` });
+        res.json({ title, story, narration, imageUrl: `data:image/png;base64,${imageResponse.data[0].b64_json}` });
     } catch (error) {
         console.error('Error generating story and image:', error);
         res.status(500).send({ error: 'Failed to generate story and image' });

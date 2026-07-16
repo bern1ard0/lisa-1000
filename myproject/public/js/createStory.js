@@ -297,12 +297,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const randomLength = lengthOptions[Math.floor(Math.random() * lengthOptions.length)];
         const randomGenre = genreOptions[Math.floor(Math.random() * genreOptions.length)];
         const stopLoading = startLoading(randomStoryButton);
-        const storyData = await generateStory(`Write a ${randomLength} ${randomGenre} story suitable for language learning alongside a narration copy with emotional delivery cues and a highly detailed relevant imagePrompt for the illustration: Your text output is: story|narration|imagePrompt`);
+        const storyData = await generateStory(`Write a ${randomLength} ${randomGenre} story suitable for language learning alongside a narration copy with emotional delivery cues and a highly detailed relevant imagePrompt for the illustration: Your text output is: title|story|narration|imagePrompt`);
         stopLoading();
         if (storyData) {
-            displayStory(storyData.story, storyData.imageUrl, `Generated ${randomGenre} Story`);
+            const storyTitle = storyData.title || `Generated ${randomGenre} Story`;
+            displayStory(storyData.story, storyData.imageUrl, storyTitle);
             currentNarration = storyData.narration || null;
-            setCurrentStory(`Generated ${randomGenre} Story`, randomGenre, 'en', storyData);
+            setCurrentStory(storyTitle, randomGenre, 'en', storyData);
             buttonContainer.style.display = 'flex';
         } else {
             displayStory(null);
@@ -321,15 +322,16 @@ document.addEventListener('DOMContentLoaded', function() {
         const emotion = document.getElementById('emotion').value;
         const language = document.getElementById('language').value;
     
-        const prompt = `Write a ${length} story with ${characterNum} characters (participants) in the ${language} language leaving you ${emotion} in the end. Alongside a narration copy with emotional delivery cues and a highly detailed relevant imagePrompt for the illustration: Your text output is: story|narration|imagePrompt`;
+        const prompt = `Write a ${length} story with ${characterNum} characters (participants) in the ${language} language leaving you ${emotion} in the end. Alongside a narration copy with emotional delivery cues and a highly detailed relevant imagePrompt for the illustration: Your text output is: title|story|narration|imagePrompt`;
         console.log(`Generating a story with prompt: ${prompt}`); // Debugging code
         const stopLoading = startLoading(generateFineTunedStoryButton);
         const storyData = await generateStory(prompt);
         stopLoading();
         if (storyData) {
-            displayStory(storyData.story, storyData.imageUrl, `Generated ${genre} Story`);
+            const storyTitle = storyData.title || `Generated ${genre} Story`;
+            displayStory(storyData.story, storyData.imageUrl, storyTitle);
             currentNarration = storyData.narration || null;
-            setCurrentStory(`Generated ${genre} Story`, genre, 'en', storyData);
+            setCurrentStory(storyTitle, genre, 'en', storyData);
             buttonContainer.style.display = 'flex';
         } else {
             displayStory(null);
@@ -350,16 +352,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const video = document.getElementById('video').checked;
         const subtitles = document.getElementById('subtitles').checked;
 
-        const prompt = `Title: ${title}, Theme: ${theme}, Input Language: ${inputLanguage}, Text: ${textInput}, outputLanguage: ${outputLanguage}, Music: ${music}, alongside a narration copy with emotional delivery cues and a highly detailed relevant imagePrompt for the illustration: Your text output is: story|narration|imagePrompt`;
+        const prompt = `Title: ${title}, Theme: ${theme}, Input Language: ${inputLanguage}, Text: ${textInput}, outputLanguage: ${outputLanguage}, Music: ${music}, alongside a narration copy with emotional delivery cues and a highly detailed relevant imagePrompt for the illustration: Your text output is: title|story|narration|imagePrompt`;
         console.log(`Generating a story with prompt: ${prompt}`); // Debugging code
         const submitButton = generateStoryForm.querySelector('button[type="submit"]');
         const stopLoading = startLoading(submitButton);
         const storyData = await generateStory(prompt);
         stopLoading();
         if (storyData) {
-            displayStory(storyData.story, storyData.imageUrl, title);
+            const storyTitle = title.trim() || storyData.title || 'My Story';
+            displayStory(storyData.story, storyData.imageUrl, storyTitle);
             currentNarration = storyData.narration || null;
-            setCurrentStory(title, theme, outputLanguage, storyData);
+            setCurrentStory(storyTitle, theme, outputLanguage, storyData);
             buttonContainer.style.display = 'flex';
             // Narrate in the language the story was generated in
             window.currentStoryLanguage = outputLanguage;

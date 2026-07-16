@@ -1,8 +1,9 @@
-// Build one library card. `getFullText` is an async () => string used the
-// first time the card expands (D1-backed works fetch their scenes on demand).
-function buildStoryCard(mainElement, { title, image, excerpt, getFullText }) {
+// Build one library card. Clicking anywhere on it (or the Read button)
+// opens the story's own reader page.
+function buildStoryCard(mainElement, { title, image, excerpt, href }) {
     const card = document.createElement('div');
-    card.className = 'story-card';
+    card.className = 'story-card story-card-link';
+    card.addEventListener('click', () => { window.location.href = href; });
 
     // Cover image, with a lettered placeholder if the file is missing
     const cover = document.createElement('img');
@@ -23,22 +24,11 @@ function buildStoryCard(mainElement, { title, image, excerpt, getFullText }) {
     const heading = document.createElement('h2');
     heading.textContent = title;
 
-    const shortText = excerpt.substring(0, 150) + '...';
     const text = document.createElement('p');
-    text.textContent = shortText;
+    text.textContent = excerpt.substring(0, 150) + '...';
 
-    let fullText = null;
     const button = document.createElement('button');
-    button.textContent = 'Read More';
-    button.addEventListener('click', async () => {
-        if (fullText === null) {
-            button.disabled = true;
-            try { fullText = await getFullText(); } finally { button.disabled = false; }
-        }
-        const expanded = card.classList.toggle('expanded');
-        text.textContent = expanded ? fullText : shortText;
-        button.textContent = expanded ? 'Show Less' : 'Read More';
-    });
+    button.textContent = 'Read More →';
 
     body.appendChild(heading);
     body.appendChild(text);
@@ -60,10 +50,7 @@ function renderWorks(mainElement, works) {
         title: work.title,
         image: work.cover_image_url,
         excerpt: work.excerpt || '',
-        getFullText: async () => {
-            const full = await fetch(`/api/works/${encodeURIComponent(work.id)}`).then(r => r.json());
-            return (full.scenes || []).map(s => s.display_text).join('\n\n');
-        },
+        href: `story.html?id=${encodeURIComponent(work.id)}`,
     }));
 }
 
@@ -135,7 +122,7 @@ async function loadLibrary() {
         title: story.title,
         image: story.image,
         excerpt: story.content,
-        getFullText: async () => story.content,
+        href: `story.html?sid=${story.id}`,
     }));
 }
 

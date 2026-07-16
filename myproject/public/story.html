@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story · Lisa 1000</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="nav-container">
+            <a href="index.html" class="brand"><span class="brand-mark">✦</span>LISA 1000</a>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="library.html">Library</a></li>
+                    <li><a href="create-story.html">Create Story</a></li>
+                    <li>
+                        <select id="nativeLanguage">
+                            <option value="default">I speak...</option>
+                            <option value="en">English</option>
+                            <option value="fr">Français</option>
+                            <option value="es">Español</option>
+                            <option value="de">Deutsch</option>
+                            <option value="zh">中文</option>
+                            <option value="ar">العربية</option>
+                            <option value="other">Other...</option>
+                        </select>
+                        <input type="text" id="otherLanguage" class="hidden" placeholder="Please specify your language">
+                    </li>
+                    <li>
+                        <div id="translation-toggle" class="translation-toggle" title="Translate mode: when on, double-clicking a word translates it into your language instead of defining it" aria-label="Toggle translate mode" role="button">T</div>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main class="story-page-main">
+        <a href="library.html" class="back-link">← Back to the Library</a>
+        <article id="story-container">
+            <img id="story-cover" alt="" class="hidden">
+            <h2 id="story-title">Loading story…</h2>
+            <div id="story-content"></div>
+            <p class="reader-hint">💡 Double-click any word for its meaning, pronunciation, or translation.</p>
+            <div class="reader-controls">
+                <label for="voiceDropdown">Voice:</label>
+                <select id="voiceDropdown">
+                    <option value="lisa">Lisa</option>
+                    <option value="adam">Adam</option>
+                    <option value="yours" disabled>🎤 Your Voice — sign up (soon)</option>
+                </select>
+                <div class="button-group">
+                    <button id="readButton">🔊 Read aloud</button>
+                    <button id="recordButton" class="ghost">🎙 Record</button>
+                    <button id="translateButton" class="ghost">🌍 Translate</button>
+                    <button id="animateButton" class="ghost coming-soon" disabled title="Animation is coming soon">🎬 Animate ✨</button>
+                </div>
+            </div>
+        </article>
+    </main>
+
+    <footer>
+        <span class="footer-brand">✦ LISA 1000</span>
+        <div class="footer-links">
+            <button id="aboutButton">About Us</button>
+            <a href="index.html">Home</a>
+            <a href="library.html">Library</a>
+        </div>
+    </footer>
+    <script src="js/tts.js"></script>
+    <script src="js/storyPage.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</body>
+</html>

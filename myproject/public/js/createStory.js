@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', function() {
     generateFineTunedStoryButton.addEventListener('click', async function() {
         const genre = document.getElementById('genre').value;
         const length = document.getElementById('length').value;
-        const characterNum = document.getElementById('characterNum').value;
+        const characterNum = document.getElementById('characterNum').value || '2';
         const emotion = document.getElementById('emotion').value;
         const language = document.getElementById('language').value;
     

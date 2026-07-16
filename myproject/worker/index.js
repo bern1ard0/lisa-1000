@@ -269,7 +269,10 @@ async function handleListWorks(env, url) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
 
     const p = url.searchParams;
-    const where = [];
+    // Listings only ever show public works. Once auth ships this becomes
+    // (visibility = 'public' OR owner_id = :viewer); 'unlisted' works are
+    // reachable by direct id but never listed; 'private' never leaves the DB.
+    const where = ["w.visibility = 'public'"];
     const binds = [];
 
     if (p.get('kind'))  { where.push('w.kind = ?');     binds.push(p.get('kind')); }
@@ -308,7 +311,11 @@ async function handleListWorks(env, url) {
 async function handleGetWork(env, id) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
 
-    const work = await env.DB.prepare('SELECT * FROM works WHERE id = ?').bind(id).first();
+    // Direct fetch serves public AND unlisted (share links); private works are
+    // indistinguishable from missing ones until auth can prove ownership.
+    const work = await env.DB.prepare(
+        "SELECT * FROM works WHERE id = ? AND visibility IN ('public','unlisted')"
+    ).bind(id).first();
     if (!work) return json({ error: 'Work not found' }, 404);
 
     const [scenes, lines, cast, emotions] = await Promise.all([

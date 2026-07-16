@@ -127,13 +127,20 @@ CREATE TABLE works (
   length          TEXT CHECK (length IN ('very_short','short','medium','long')),
   setting_id      TEXT REFERENCES settings(id),
   source          TEXT NOT NULL CHECK (source IN ('lisa','user')),
+  visibility      TEXT NOT NULL DEFAULT 'private'
+                  CHECK (visibility IN ('private','unlisted','public')),
+                  -- private:  owner only (the default — a user's story is
+                  --           theirs unless they choose otherwise)
+                  -- unlisted: reachable by direct link/share page, never listed
+                  -- public:   shown in the shared Library
   cover_image_url TEXT,                   -- R2
   created_at      INTEGER NOT NULL
 );
 
-CREATE INDEX idx_works_owner  ON works(owner_id);
-CREATE INDEX idx_works_kind   ON works(kind);
-CREATE INDEX idx_works_genre  ON works(genre);
+CREATE INDEX idx_works_owner      ON works(owner_id);
+CREATE INDEX idx_works_kind       ON works(kind);
+CREATE INDEX idx_works_genre      ON works(genre);
+CREATE INDEX idx_works_visibility ON works(visibility);
 ```
 
 ```sql
@@ -336,8 +343,11 @@ For `kind: "story"`, `characters` may be empty and `lines` may be omitted —
 
 ## 7. Open questions (decide before building)
 
-- Public/private visibility on `works` (needed for a shared Library and OG
-  share pages): a `visibility` column — default private, `lisa` rows public?
+- ~~Public/private visibility on `works`~~ **Resolved** (migration 0003):
+  `works.visibility` — `private` (default) / `unlisted` / `public`; `lisa`
+  seeds are public. Listings return only `public` (later: `OR owner = viewer`);
+  direct fetch serves `public` + `unlisted`; `private` never leaves the DB.
+  Renders (narrations, animations) inherit the work's visibility.
 - Play audio mixing: stitch per-line clips server-side into one `narrations`
   file, or play sequential clips client-side? (Server-side stitch is simpler
   for replay + export; start there.)

@@ -866,6 +866,77 @@ fieldset.extras legend {
     border-radius: 10px;
 }
 
+/* ---------- Library filters ---------- */
+.filter-bar {
+    max-width: 1140px;
+    width: 100%;
+    margin: 0 auto 8px;
+    padding: 0 24px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.filter-bar.hidden { display: none; }
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.filter-label {
+    width: 52px;
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.chip {
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 999px;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-muted);
+    box-shadow: none;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.chip:hover {
+    border-color: rgba(196, 181, 253, 0.5);
+    color: #fff;
+    transform: none;
+    box-shadow: none;
+}
+
+.chip.active {
+    background: linear-gradient(135deg, var(--purple), var(--purple-deep));
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
+}
+
+.library-empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--text-muted);
+    padding: 60px 0;
+    font-size: 16px;
+}
+
+@media (max-width: 768px) {
+    .filter-bar { padding: 0 12px; }
+    .filter-label { width: 100%; }
+}
+
 /* ---------- Library cards ---------- */
 #story-list {
     display: grid;

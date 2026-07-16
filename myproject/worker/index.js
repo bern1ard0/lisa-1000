@@ -342,6 +342,37 @@ async function handleGetWork(env, id) {
     });
 }
 
+// ---------- Media storage (R2) ----------
+
+// Decode a data:image/... URL and store it in the MEDIA bucket.
+// Returns the /media/<key> path the worker serves it back from.
+async function storeDataUrl(env, dataUrl, keyBase) {
+    const match = /^data:(image\/(png|jpeg|webp));base64,(.+)$/.exec(dataUrl);
+    if (!match) throw new Error('Unsupported data URL');
+    const [, contentType, ext, b64] = match;
+
+    const binary = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    if (binary.length > 8 * 1024 * 1024) throw new Error('Image too large (max 8 MB)');
+
+    const key = `${keyBase}.${ext === 'jpeg' ? 'jpg' : ext}`;
+    await env.MEDIA.put(key, binary, { httpMetadata: { contentType } });
+    return `/media/${key}`;
+}
+
+// GET /media/* — serve R2 objects (covers now; audio/clips later).
+async function handleMedia(env, path) {
+    if (!env.MEDIA) return json({ error: 'Media storage not configured' }, 501);
+    const key = decodeURIComponent(path.slice('/media/'.length));
+    const object = await env.MEDIA.get(key);
+    if (!object) return json({ error: 'Not found' }, 404);
+    return new Response(object.body, {
+        headers: {
+            'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+            'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+    });
+}
+
 // POST /api/works — persist a generated story into the library.
 // Pre-auth, works are owned by the 'guest' system user; the client offers
 // 'public' or 'unlisted'. 'private' arrives with accounts (a private guest
@@ -377,11 +408,12 @@ async function handleCreateWork(env, body) {
         }
     }
 
-    // Only persist real URLs / static paths. Generated covers arrive as
-    // multi-MB base64 data URLs — storing those in D1 rows is the expensive
-    // mistake; they get an R2 upload in a follow-up and a placeholder for now.
+    // Real URLs / static paths persist as-is. Generated covers arrive as
+    // multi-MB base64 data URLs: with an R2 binding they're uploaded and the
+    // row stores a small /media/... path; without one they're dropped (a
+    // data URL in a D1 row is the expensive mistake).
     const keepUrl = (u) =>
-        typeof u === 'string' && (/^https?:\/\//.test(u) || u.startsWith('images/')) ? u : null;
+        typeof u === 'string' && (/^https?:\/\//.test(u) || u.startsWith('images/') || u.startsWith('/media/')) ? u : null;
 
     const known = new Set(
         (await env.DB.prepare('SELECT name FROM emotions').all()).results.map((e) => e.name)
@@ -391,6 +423,16 @@ async function handleCreateWork(env, body) {
     const workId = `w_${crypto.randomUUID()}`;
     const now = Math.floor(Date.now() / 1000);
     const lengths = ['very_short', 'short', 'medium', 'long'];
+
+    // Upload a data-URL cover to R2 and reference it by path instead.
+    let coverUrl = keepUrl(cover_image_url);
+    if (!coverUrl && env.MEDIA && typeof cover_image_url === 'string' && cover_image_url.startsWith('data:image/')) {
+        try {
+            coverUrl = await storeDataUrl(env, cover_image_url, `covers/${workId}`);
+        } catch (error) {
+            console.error('Cover upload to R2 failed, saving without cover:', error.message);
+        }
+    }
 
     const statements = [
         env.DB.prepare(
@@ -403,7 +445,7 @@ async function handleCreateWork(env, body) {
             String(language).slice(0, 10),
             lengths.includes(length) ? length : null,
             visibility,
-            keepUrl(cover_image_url),
+            coverUrl,
             now
         ),
         ...scenes.map((s, i) =>
@@ -450,6 +492,7 @@ export default {
             }
 
             if (method === 'GET') {
+                if (path.startsWith('/media/')) return await handleMedia(env, path);
                 if (path === '/api/works') return await handleListWorks(env, url);
                 if (path.startsWith('/api/works/')) {
                     return await handleGetWork(env, decodeURIComponent(path.slice('/api/works/'.length)));

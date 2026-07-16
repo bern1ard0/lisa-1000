@@ -23,5 +23,15 @@
             "database_id": "d6abaac2-b196-4dd6-abab-44ef01b58e5d",
             "migrations_dir": "worker/migrations"
         }
+    ],
+    // R2 bucket for generated media (story covers now; narration audio and
+    // animation clips later). One-time setup in the dashboard:
+    //   R2 Object Storage -> Create bucket -> name it "lisa1000-media"
+    // (no public access needed — the worker serves objects via /media/*)
+    "r2_buckets": [
+        {
+            "binding": "MEDIA",
+            "bucket_name": "lisa1000-media"
+        }
     ]
 }

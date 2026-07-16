@@ -47,27 +47,84 @@ function buildStoryCard(mainElement, { title, image, excerpt, getFullText }) {
     mainElement.appendChild(card);
 }
 
+function renderWorks(mainElement, works) {
+    mainElement.innerHTML = '';
+    if (!works.length) {
+        const empty = document.createElement('p');
+        empty.className = 'library-empty';
+        empty.textContent = 'No stories match these filters — try widening them.';
+        mainElement.appendChild(empty);
+        return;
+    }
+    works.forEach(work => buildStoryCard(mainElement, {
+        title: work.title,
+        image: work.cover_image_url,
+        excerpt: work.excerpt || '',
+        getFullText: async () => {
+            const full = await fetch(`/api/works/${encodeURIComponent(work.id)}`).then(r => r.json());
+            return (full.scenes || []).map(s => s.display_text).join('\n\n');
+        },
+    }));
+}
+
+// Active filter state; empty string = "All" for that group.
+const libraryFilters = { owner: '', kind: '', genre: '', emotion: '' };
+
+async function fetchWorks() {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(libraryFilters)) {
+        if (value) params.set(key, value);
+    }
+    const qs = params.toString();
+    const resp = await fetch('/api/works' + (qs ? `?${qs}` : ''));
+    if (!resp.ok) throw new Error(`Works API ${resp.status}`);
+    return (await resp.json()).works || [];
+}
+
+// Fill the genre group with chips for every genre present in the library.
+function buildGenreChips(works) {
+    const group = document.querySelector('.filter-group[data-param="genre"]');
+    const genres = [...new Set(works.map(w => w.genre).filter(Boolean))].sort();
+    genres.forEach(genre => {
+        const chip = document.createElement('button');
+        chip.className = 'chip';
+        chip.setAttribute('data-value', genre);
+        chip.textContent = genre.charAt(0).toUpperCase() + genre.slice(1);
+        group.appendChild(chip);
+    });
+}
+
+function activateFilterBar(mainElement) {
+    const bar = document.getElementById('library-filters');
+    bar.classList.remove('hidden');
+    bar.addEventListener('click', async (event) => {
+        const chip = event.target.closest('.chip');
+        if (!chip) return;
+        const group = chip.closest('.filter-group');
+        group.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        libraryFilters[group.getAttribute('data-param')] = chip.getAttribute('data-value');
+        try {
+            renderWorks(mainElement, await fetchWorks());
+        } catch (error) {
+            console.error('Error filtering stories:', error);
+        }
+    });
+}
+
 // Works API (D1) first; stories.json as fallback for environments without
-// a database (local Express dev, static preview).
+// a database (local Express dev, static preview). Filters only appear in
+// API mode — the flat JSON has no genre/emotion data to filter on.
 async function loadLibrary() {
     const mainElement = document.getElementById('story-list');
 
     try {
-        const resp = await fetch('/api/works');
-        if (resp.ok) {
-            const { works } = await resp.json();
-            if (works && works.length) {
-                works.forEach(work => buildStoryCard(mainElement, {
-                    title: work.title,
-                    image: work.cover_image_url,
-                    excerpt: work.excerpt || '',
-                    getFullText: async () => {
-                        const full = await fetch(`/api/works/${encodeURIComponent(work.id)}`).then(r => r.json());
-                        return (full.scenes || []).map(s => s.display_text).join('\n\n');
-                    },
-                }));
-                return;
-            }
+        const works = await fetchWorks();
+        if (works.length) {
+            renderWorks(mainElement, works);
+            buildGenreChips(works);
+            activateFilterBar(mainElement);
+            return;
         }
     } catch (error) {
         console.warn('Works API unavailable, falling back to stories.json:', error);

@@ -47,6 +47,36 @@
         </div>
     </header>
 
+    <section id="library-filters" class="filter-bar hidden" aria-label="Filter stories">
+        <div class="filter-group" data-param="owner">
+            <span class="filter-label">Who</span>
+            <button class="chip active" data-value="">All</button>
+            <button class="chip" data-value="lisa">✦ Lisa's</button>
+            <button class="chip" data-value="guest">Community</button>
+        </div>
+        <div class="filter-group" data-param="kind">
+            <span class="filter-label">Type</span>
+            <button class="chip active" data-value="">All</button>
+            <button class="chip" data-value="story">📖 Stories</button>
+            <button class="chip" data-value="play">🎭 Plays</button>
+        </div>
+        <div class="filter-group" data-param="genre">
+            <span class="filter-label">Genre</span>
+            <button class="chip active" data-value="">All</button>
+            <!-- genre chips are filled in from the loaded works -->
+        </div>
+        <div class="filter-group" data-param="emotion">
+            <span class="filter-label">Mood</span>
+            <button class="chip active" data-value="">All</button>
+            <button class="chip" data-value="happy">😊 Happy</button>
+            <button class="chip" data-value="sad">😢 Sad</button>
+            <button class="chip" data-value="inspired">🌟 Inspired</button>
+            <button class="chip" data-value="cozy">🕯️ Cozy</button>
+            <button class="chip" data-value="funny">😄 Funny</button>
+            <button class="chip" data-value="excited">⚡ Excited</button>
+        </div>
+    </section>
+
     <main id="story-list">
         <!-- Stories will be loaded here dynamically -->
     </main>

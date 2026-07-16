@@ -20,7 +20,7 @@
         {
             "binding": "DB",
             "database_name": "lisa1000",
-            "database_id": "REPLACE_WITH_DATABASE_ID",
+            "database_id": "d6abaac2-b196-4dd6-abab-44ef01b58e5d",
             "migrations_dir": "worker/migrations"
         }
     ]

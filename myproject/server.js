@@ -16,7 +16,10 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // OpenAI is kept for text-to-speech only (Claude does not generate audio).
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const CLAUDE_MODEL = 'claude-haiku-4-5'; // cheapest tier; swap to 'claude-sonnet-5' or 'claude-opus-4-8' for higher quality
+const CLAUDE_MODEL = 'claude-haiku-4-5'; // definitions & translation (cheapest tier)
+const STORY_MODEL = 'claude-sonnet-5'; // story generation (higher quality)
+// Keep generated illustrations consistent with the library covers' look.
+const IMAGE_STYLE = "Children's storybook illustration, warm whimsical hand-painted style, soft watercolor colors, gentle light: ";
 
 // Extract the plain text from a Claude response (skips thinking blocks).
 function claudeText(message) {
@@ -187,7 +190,7 @@ app.post('/generate-story', async (req, res) => {
     }
     try {
         const message = await anthropic.messages.create({
-            model: CLAUDE_MODEL,
+            model: STORY_MODEL,
             max_tokens: 8192,
             system: 'You are a helpful assistant designed to write short stories and suitable image prompts in plain text format: story|imagePrompt. Output exactly one "|" separating the story from the image prompt, and nothing else.',
             messages: [
@@ -204,7 +207,7 @@ app.post('/generate-story', async (req, res) => {
         // higgsfield.subscribe('/v1/text2image/soul', { input: { prompt, ... }, withPolling: true })
         const imageResponse = await openai.images.generate({
             model: 'gpt-image-2',
-            prompt: (imagePrompt || story).substring(0, 1000),
+            prompt: IMAGE_STYLE + (imagePrompt || story).substring(0, 900),
             size: '1024x1024',
         });
 

@@ -9,7 +9,10 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 
-const CLAUDE_MODEL = 'claude-haiku-4-5'; // cheapest tier; swap to 'claude-sonnet-5' or 'claude-opus-4-8' for higher quality
+const CLAUDE_MODEL = 'claude-haiku-4-5'; // definitions & translation (cheapest tier)
+const STORY_MODEL = 'claude-sonnet-5'; // story generation (higher quality)
+// Keep generated illustrations consistent with the library covers' look.
+const IMAGE_STYLE = "Children's storybook illustration, warm whimsical hand-painted style, soft watercolor colors, gentle light: ";
 const HIGGSFIELD_BASE = 'https://platform.higgsfield.ai';
 
 function json(data, status = 200) {
@@ -189,7 +192,7 @@ async function handleGenerateStory(env, anthropic, body) {
     if (!prompt) return json({ error: 'No prompt provided' }, 400);
 
     const message = await anthropic.messages.create({
-        model: CLAUDE_MODEL,
+        model: STORY_MODEL,
         max_tokens: 8192,
         system: 'You are a helpful assistant designed to write short stories and suitable image prompts in plain text format: story|imagePrompt. Output exactly one "|" separating the story from the image prompt, and nothing else.',
         messages: [{ role: 'user', content: prompt }],
@@ -199,7 +202,7 @@ async function handleGenerateStory(env, anthropic, body) {
         .split('|')
         .map((part) => part.trim());
 
-    const imageUrl = await generateIllustrationOpenAI(env, (imagePrompt || story).substring(0, 1000));
+    const imageUrl = await generateIllustrationOpenAI(env, IMAGE_STYLE + (imagePrompt || story).substring(0, 900));
     return json({ story, imageUrl });
 }
 

@@ -11,7 +11,9 @@ app.use(cors()); // Enable CORS for all routes
 const PORT = process.env.PORT || 3000;
 app.use(express.static('public'));
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// maxRetries: the SDK retries transient failures (429 rate limit, 529
+// overloaded, 5xx) with exponential backoff before giving up.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: 5 });
 
 // Higgsfield reads HF_CREDENTIALS ("KEY_ID:KEY_SECRET") from the environment.
 // OpenAI is kept for text-to-speech only (Claude does not generate audio).

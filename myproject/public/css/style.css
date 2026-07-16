@@ -961,6 +961,12 @@ fieldset.extras legend {
     color: var(--text-muted);
 }
 
+.loading-hint {
+    font-size: 13px;
+    color: var(--text-faint);
+    margin: 0;
+}
+
 .popup .def-body h4 {
     margin: 14px 0 4px;
     font-family: 'Karla', sans-serif;

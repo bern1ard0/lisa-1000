@@ -36,19 +36,9 @@ function claudeText(message) {
 }
 
 // ---------- Claude with an OpenAI fallback ----------
-// The Anthropic SDK already retries transient failures (maxRetries: 5 above);
-// this is the next line of defense for when Claude is down for longer than
-// the retry window can cover — a different provider entirely, rather than
-// trying the same one again.
-
-// Anthropic APIError exposes `.status`; some failures (like the 529
-// "Overloaded" seen in practice) surface with the status folded into the
-// message instead, so check both.
-function isRetryableClaudeError(error) {
-    const status = error?.status;
-    if (status === 429 || (status >= 500 && status < 600)) return true;
-    return /overloaded|529|rate.?limit/i.test(String(error?.message || error));
-}
+// The rule is simple: if Anthropic isn't working — for any reason — use
+// OpenAI. The Anthropic SDK retries transient failures first (maxRetries: 5
+// above); anything that still fails switches provider.
 
 async function openaiChatText(system, prompt, maxTokens) {
     const completion = await openai.chat.completions.create({
@@ -64,8 +54,8 @@ async function openaiChatText(system, prompt, maxTokens) {
     return text;
 }
 
-// Try Claude; if it fails with a retryable error and an OpenAI key is
-// configured, retry the same prompt against OpenAI instead.
+// Try Claude; if it fails for any reason and an OpenAI key is configured,
+// run the same prompt against OpenAI instead.
 async function generateText({ system, prompt, maxTokens }) {
     try {
         const message = await anthropic.messages.create({
@@ -76,7 +66,9 @@ async function generateText({ system, prompt, maxTokens }) {
         });
         return { text: claudeText(message), provider: 'claude' };
     } catch (error) {
-        if (!process.env.OPENAI_API_KEY || !isRetryableClaudeError(error)) throw error;
+        if (!process.env.OPENAI_API_KEY) throw error;
+        // Still logged so a config problem (e.g. bad Anthropic key) is
+        // visible in the logs even while OpenAI keeps the site alive.
         console.error('Claude unavailable, falling back to OpenAI:', error.message);
         const text = await openaiChatText(system, prompt, maxTokens);
         return { text, provider: 'openai' };

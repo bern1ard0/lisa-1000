@@ -1,7 +1,3 @@
--- Seed: the original 10 LISA stories from public/data/stories.json,
--- migrated into works/scenes and owned by the system user 'lisa'.
--- Cover images stay on the static path until assets move to R2.
-
 INSERT INTO works (id, owner_id, kind, title, genre, language, length, source, cover_image_url, created_at) VALUES
     ('w_001', 'lisa', 'story', 'Spot', 'friendship', 'en', 'very_short', 'lisa', 'images/covers/story_1.webp', 1752624000);
 INSERT INTO work_emotions (work_id, emotion) VALUES ('w_001', 'happy');

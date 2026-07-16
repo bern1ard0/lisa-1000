@@ -127,14 +127,10 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Displaying story:', story); // Debugging code
         storyContainer.innerHTML = `
             <h2>${title}</h2>
-            <img src="${imageUrl}" alt="Generated Image" class="generated-image" style="max-width: 100%; height: auto; border-radius: 10px; margin-bottom: 20px;">
+            <img src="${imageUrl}" alt="Generated Image" class="generated-image">
             <p id="story-content">${story}</p>`;
-        storyContainer.style.backgroundColor = '#f0f8ff'; // Light blue background
-        storyContainer.style.padding = '20px';
-        storyContainer.style.border = '2px solid #000';
-        storyContainer.style.borderRadius = '10px';
-        storyContainer.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
-        storyContainer.style.transition = 'background-color 0.5s ease, background-image 1s ease-in-out'; // Smooth transition for background color and image
+        storyContainer.classList.add('generated-story');
+        storyContainer.style.transition = 'opacity 0.5s ease';
         storyContainer.style.opacity = '0';
         setTimeout(() => {
             storyContainer.style.opacity = '1';
@@ -143,14 +139,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     takeMattersButton.addEventListener('click', function() {
         console.log('Lisa\'s Story button clicked'); // Debugging code
-        takeMattersSection.style.display = 'block';
+        takeMattersSection.style.display = 'flex';
         generateStorySection.style.display = 'none';
+        takeMattersButton.classList.add('selected');
+        generateStoryButton.classList.remove('selected');
     });
 
     generateStoryButton.addEventListener('click', function() {
         console.log('Generate Story button clicked'); // Debugging code
         takeMattersSection.style.display = 'none';
-        generateStorySection.style.display = 'block';
+        generateStorySection.style.display = 'flex';
+        generateStoryButton.classList.add('selected');
+        takeMattersButton.classList.remove('selected');
     });
 
     randomStoryButton.addEventListener('click', async function() {

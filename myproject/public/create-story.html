@@ -3,20 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Story</title>
+    <title>Create Story · Lisa 1000</title>
     <link rel="stylesheet" href="css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <header>
         <div class="nav-container">
+            <a href="index.html" class="brand"><span class="brand-mark">✦</span>LISA 1000</a>
             <nav>
                 <ul>
                     <li><a href="index.html">Home</a></li>
                     <li><a href="library.html">Library</a></li>
-                    <li><a href="create-story.html">Create Story</a></li> <!-- Add Create Story tab -->
-                    <li>   
+                    <li><a href="create-story.html">Create Story</a></li>
+                    <li>
                         <select id="nativeLanguage">
                             <option value="default">I speak...</option>
                             <option value="en">English</option>
@@ -35,30 +36,31 @@
                 </ul>
             </nav>
         </div>
-        <div>
-            <h1>Create Story</h1>
+        <div class="page-header">
+            <h1>Create a story</h1>
+            <p>Tell us the spark — we'll turn it into an illustrated, narrated tale.</p>
         </div>
-
     </header>
-    <main>
-        <section id="create-story-section">
-            <h2>Choose Your Option</h2>
-            <button id="takeMattersButton">LISA's Story</button>
-            <button id="generateStoryButton">My Story</button>
+    <main class="create-main">
+        <section id="create-story-section" class="option-tabs">
+            <button id="takeMattersButton">✨ LISA's Story</button>
+            <button id="generateStoryButton">✍️ My Story</button>
         </section>
 
-        <section id="take-matters-section" style="display:none;">
+        <section id="take-matters-section" class="create-section" style="display:none;">
             <h2>Lisa's Story</h2>
-            <button id="randomStoryButton">Surprise</button>
-            <button id="fineTuneButton">Fine Tune</button>
+            <div class="option-row">
+                <button id="randomStoryButton">🎲 Surprise me</button>
+                <button id="fineTuneButton" class="ghost">🎛 Fine tune</button>
+            </div>
             <div id="fineTuneOptions" class="story-form" style="display:none;">
                 <h3>Fine Tune Your Story</h3>
                 <div class="form-row">
-                    <label for="genre">Genre:</label>
+                    <label for="genre">Genre</label>
                     <input type="text" id="genre" name="genre" placeholder="e.g. adventure, mystery">
                 </div>
                 <div class="form-row">
-                    <label for="length">Length:</label>
+                    <label for="length">Length</label>
                     <select id="length" name="length">
                         <option value="very short">Very Short</option>
                         <option value="short">Short</option>
@@ -67,35 +69,34 @@
                     </select>
                 </div>
                 <div class="form-row">
-                    <label for="characterNum">Number of Participants:</label>
+                    <label for="characterNum">Number of Participants</label>
                     <input type="number" id="characterNum" name="characterNum" min="1" placeholder="2">
                 </div>
                 <div class="form-row">
-                    <label for="emotion">Emotion (how you'd like to feel after listening):</label>
+                    <label for="emotion">Emotion (how you'd like to feel after listening)</label>
                     <input type="text" id="emotion" name="emotion" placeholder="e.g. inspired, happy">
                 </div>
                 <div class="form-row">
-                    <label for="language">Language:</label>
+                    <label for="language">Language</label>
                     <input type="text" id="language" name="language" placeholder="e.g. English">
                 </div>
-                <button id="generateFineTunedStoryButton">Generate Story</button>
+                <button id="generateFineTunedStoryButton">Generate story ✨</button>
             </div>
         </section>
-        
 
-        <section id="generate-story-section" style="display:none;">
+        <section id="generate-story-section" class="create-section" style="display:none;">
             <h2>My Story</h2>
             <form id="generateStoryForm" class="story-form">
                 <div class="form-row">
-                    <label for="title">Title:</label>
+                    <label for="title">Title</label>
                     <input type="text" id="title" name="title" placeholder="Give your story a name">
                 </div>
                 <div class="form-row">
-                    <label for="theme">Theme:</label>
+                    <label for="theme">Theme</label>
                     <input type="text" id="theme" name="theme" placeholder="e.g. friendship, courage">
                 </div>
                 <div class="form-row">
-                    <label for="inputLanguage">Input Language:</label>
+                    <label for="inputLanguage">Input language</label>
                     <select id="inputLanguage" name="inputLanguage">
                         <option value="en">English</option>
                         <option value="fr">French</option>
@@ -106,11 +107,11 @@
                     </select>
                 </div>
                 <div class="form-row">
-                    <label for="textInput">Text Input:</label>
-                    <textarea id="textInput" name="textInput" rows="4" placeholder="Ideas, characters, or a draft to build on..."></textarea>
+                    <label for="textInput">Your idea</label>
+                    <textarea id="textInput" name="textInput" rows="5" placeholder="Ideas, characters, or a draft to build on..."></textarea>
                 </div>
                 <div class="form-row">
-                    <label for="outputLanguage">Output Language:</label>
+                    <label for="outputLanguage">Output language</label>
                     <select id="outputLanguage" name="outputLanguage">
                         <option value="en">English</option>
                         <option value="fr">French</option>
@@ -121,20 +122,20 @@
                     </select>
                 </div>
                 <fieldset class="extras">
-                    <legend>Extras</legend>
+                    <legend>✨ Extras</legend>
                     <label class="checkbox-row"><input type="checkbox" id="music" name="music"> Music</label>
                     <label class="checkbox-row"><input type="checkbox" id="scenery" name="scenery"> Scenery</label>
                     <label class="checkbox-row"><input type="checkbox" id="video" name="video"> Video</label>
                     <label class="checkbox-row"><input type="checkbox" id="subtitles" name="subtitles"> Subtitles</label>
                 </fieldset>
-                <button type="submit">Generate Story</button>
+                <button type="submit">Generate story ✨</button>
             </form>
         </section>
 
         <!-- Story container for displaying generated stories -->
         <div id="c-story-container"></div>
         <div id="button-container" style="display: none;">
-            <label for="voiceDropdown">Select Voice:</label> 
+            <label for="voiceDropdown">Voice:</label>
             <select id="voiceDropdown">
                 <option value="nova" selected>Lisa</option>
                 <option value="alloy">Andi</option>
@@ -142,13 +143,21 @@
                 <option value="fable">Hannah</option>
                 <option value="onyx">Roy</option>
                 <option value="shimmer">Emma</option>
-            </select>            
-            <button id="readButton">Read</button>
-            <button id="translateButton">Translate</button>
-            <button id="narrateButton">Narrate</button>
+            </select>
+            <button id="readButton">🔊 Read</button>
+            <button id="translateButton" class="ghost">🌍 Translate</button>
+            <button id="narrateButton" class="ghost">🎙 Narrate</button>
             <button id="animateButton" class="coming-soon" disabled title="Animation is coming soon">Animate ✨</button>
         </div>
     </main>
+    <footer>
+        <span class="footer-brand">✦ LISA 1000</span>
+        <div class="footer-links">
+            <button id="aboutButton">About Us</button>
+            <a href="index.html">Home</a>
+            <a href="library.html">Library</a>
+        </div>
+    </footer>
     <script src="js/createStory.js"></script>
 </body>
 </html>

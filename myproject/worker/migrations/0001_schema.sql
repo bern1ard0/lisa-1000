@@ -1,6 +1,3 @@
--- LISA 1000 schema v1 — see docs/SCHEMA.md for the full design rationale.
--- Apply with: npx wrangler d1 migrations apply lisa1000
-
 CREATE TABLE users (
     id          TEXT PRIMARY KEY,
     handle      TEXT UNIQUE NOT NULL,
@@ -132,8 +129,6 @@ CREATE TABLE animation_clips (
     status       TEXT NOT NULL DEFAULT 'pending',
     UNIQUE (animation_id, idx)
 );
-
--- ---------- Vocabulary + system seeds ----------
 
 INSERT INTO users (id, handle, email, created_at) VALUES
     ('lisa', 'lisa', NULL, 1752624000);

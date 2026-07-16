@@ -91,6 +91,32 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`Selected voice: ${selectedVoice}`);
     });
 
+    // Show a staged loading indicator while the story + image generate (~20-60s)
+    function startLoading(triggerButton) {
+        const stages = [
+            "Lisa is writing your story...",
+            "Illustrating your story...",
+            "Adding the finishing touches..."
+        ];
+        let stageIndex = 0;
+        if (triggerButton) triggerButton.disabled = true;
+        buttonContainer.style.display = 'none';
+        storyContainer.innerHTML = `
+            <div class="loading-overlay">
+                <div class="spinner"></div>
+                <p class="loading-status">${stages[0]}</p>
+            </div>`;
+        const timer = setInterval(() => {
+            stageIndex = Math.min(stageIndex + 1, stages.length - 1);
+            const statusEl = storyContainer.querySelector('.loading-status');
+            if (statusEl) statusEl.textContent = stages[stageIndex];
+        }, 15000);
+        return function stopLoading() {
+            clearInterval(timer);
+            if (triggerButton) triggerButton.disabled = false;
+        };
+    }
+
     function displayStory(story, imageUrl, title = 'Generated Story') {
         if (!story) {
             storyContainer.innerHTML = '<h2>Failed to generate story</h2>';
@@ -131,10 +157,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const genreOptions = ["fantasy", "mystery", "adventure", "science fiction", "historical"];
         const randomLength = lengthOptions[Math.floor(Math.random() * lengthOptions.length)];
         const randomGenre = genreOptions[Math.floor(Math.random() * genreOptions.length)];
+        const stopLoading = startLoading(randomStoryButton);
         const storyData = await generateStory(`Write a ${randomLength} ${randomGenre} story suitable for language learning alongside a highly detailed relevant imagePrompt for the illustration: Your text output is: story|imagePrompt`);
+        stopLoading();
         if (storyData) {
             displayStory(storyData.story, storyData.imageUrl, `Generated ${randomGenre} Story`);
             buttonContainer.style.display = 'flex';
+        } else {
+            displayStory(null);
         }
     });
 
@@ -152,10 +182,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
         const prompt = `Write a ${length} story with ${characterNum} characters (participants) in the ${language} language leaving you ${emotion} in the end. Alongside a highly detailed relevant imagePrompt for the illustration: Your text output is: story|imagePrompt`;
         console.log(`Generating a story with prompt: ${prompt}`); // Debugging code
+        const stopLoading = startLoading(generateFineTunedStoryButton);
         const storyData = await generateStory(prompt);
+        stopLoading();
         if (storyData) {
             displayStory(storyData.story, storyData.imageUrl, `Generated ${genre} Story`);
             buttonContainer.style.display = 'flex';
+        } else {
+            displayStory(null);
         }
     });
     
@@ -175,10 +209,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const prompt = `Title: ${title}, Theme: ${theme}, Input Language: ${inputLanguage}, Text: ${textInput}, outputLanguage: ${outputLanguage}, Music: ${music}, alongside a highly detailed relevant imagePrompt for the illustration: Your text output is: story|imagePrompt`;
         console.log(`Generating a story with prompt: ${prompt}`); // Debugging code
+        const submitButton = generateStoryForm.querySelector('button[type="submit"]');
+        const stopLoading = startLoading(submitButton);
         const storyData = await generateStory(prompt);
+        stopLoading();
         if (storyData) {
             displayStory(storyData.story, storyData.imageUrl, title);
             buttonContainer.style.display = 'flex';
+        } else {
+            displayStory(null);
         }
     });
 
@@ -193,11 +232,19 @@ document.addEventListener('DOMContentLoaded', function() {
             targetLanguage = document.getElementById('otherLanguage').value.trim();
         }
         if (targetLanguage && targetLanguage !== 'default') {
-            const translatedStory = await translateText(storyText, targetLanguage);
-            if (translatedStory) {
-                const currentImageURL = document.querySelector('.generated-image').src;
-                const currentTitle = document.querySelector('#c-story-container h2').textContent;
-                displayStory(translatedStory, currentImageURL, currentTitle);
+            translateButton.disabled = true;
+            const originalLabel = translateButton.textContent;
+            translateButton.textContent = 'Translating...';
+            try {
+                const translatedStory = await translateText(storyText, targetLanguage);
+                if (translatedStory) {
+                    const currentImageURL = document.querySelector('.generated-image').src;
+                    const currentTitle = document.querySelector('#c-story-container h2').textContent;
+                    displayStory(translatedStory, currentImageURL, currentTitle);
+                }
+            } finally {
+                translateButton.disabled = false;
+                translateButton.textContent = originalLabel;
             }
         }
     });
@@ -274,11 +321,26 @@ async function defineText(word) {
             throw new Error(`Server error: ${response.statusText}`);
         }
         const data = await response.json();
-        return data.definition;
+        return data;
     } catch (error) {
         console.error('Error getting definition:', error);
         return null;
     }
+}
+
+// Build popup HTML for a definition entry (word, phonetic, audio, meanings)
+function renderDefinition(entry) {
+    const meanings = (entry.meanings && entry.meanings.length)
+        ? entry.meanings.map(m => `<p><em>${m.partOfSpeech}</em> — ${m.definition}${m.example ? `<br><span class="def-example">"${m.example}"</span>` : ''}</p>`).join('')
+        : `<p>${(entry.definition || '').replace(/\n/g, '<br>')}</p>`;
+    const audio = entry.audioUrl
+        ? `<button class="pronounce-btn" onclick="new Audio('${entry.audioUrl}').play()">🔊 Pronounce</button>`
+        : '';
+    return `
+        <h2>${entry.word || 'Definition'}</h2>
+        ${entry.phonetic ? `<p class="phonetic">${entry.phonetic}</p>` : ''}
+        ${audio}
+        ${meanings}`;
 }
 
 // Function to translate text
@@ -316,12 +378,9 @@ async function handleDoubleClick() {
                 }
             }
         } else {
-            const definition = await defineText(selectedText);
-            if (definition) {
-                showPopup(`
-                    <h2>Definition</h2>
-                    <p>${definition}</p>
-                `);
+            const entry = await defineText(selectedText);
+            if (entry) {
+                showPopup(renderDefinition(entry));
             }
         }
     }

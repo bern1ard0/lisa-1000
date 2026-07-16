@@ -32,7 +32,32 @@ function claudeText(message) {
 }
 
 
-// Endpoint for generating definitions using Claude
+// Look up a single English word in the free dictionary API.
+// Returns { word, phonetic, audioUrl, meanings } or null if not found.
+async function lookupDictionary(word) {
+    const resp = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
+    );
+    if (!resp.ok) return null;
+
+    const entries = await resp.json();
+    const entry = Array.isArray(entries) ? entries[0] : null;
+    if (!entry) return null;
+
+    const phonetics = entry.phonetics || [];
+    const phonetic = entry.phonetic || phonetics.find((p) => p.text)?.text || '';
+    const audioUrl = phonetics.find((p) => p.audio)?.audio || '';
+    const meanings = (entry.meanings || []).slice(0, 3).map((m) => ({
+        partOfSpeech: m.partOfSpeech,
+        definition: m.definitions?.[0]?.definition || '',
+        example: m.definitions?.[0]?.example || '',
+    }));
+    if (!meanings.length) return null;
+
+    return { word: entry.word, phonetic, audioUrl, meanings };
+}
+
+// Endpoint for definitions: dictionary API first, Claude as fallback
 app.post('/definition', async (req, res) => {
     const { word } = req.body;
 
@@ -40,6 +65,22 @@ app.post('/definition', async (req, res) => {
         return res.status(400).send({ error: 'No word provided' });
     }
 
+    // Single English words: free dictionary API (definition + phonetics + audio)
+    if (/^[a-zA-Z'-]+$/.test(word.trim())) {
+        try {
+            const result = await lookupDictionary(word.trim());
+            if (result) {
+                const definition = result.meanings
+                    .map((m) => `(${m.partOfSpeech}) ${m.definition}${m.example ? ` — e.g. "${m.example}"` : ''}`)
+                    .join('\n');
+                return res.json({ ...result, definition, source: 'dictionary' });
+            }
+        } catch (error) {
+            console.error('Dictionary API failed, falling back to Claude:', error.message);
+        }
+    }
+
+    // Fallback: phrases, non-English words, or anything the dictionary missed
     try {
         const message = await anthropic.messages.create({
             model: CLAUDE_MODEL,
@@ -50,7 +91,7 @@ app.post('/definition', async (req, res) => {
             ]
         });
 
-        res.json({ definition: claudeText(message) });
+        res.json({ word, definition: claudeText(message), phonetic: '', audioUrl: '', meanings: [], source: 'claude' });
     } catch (error) {
         console.error('Error getting definition:', error);
         res.status(500).json({ error: 'Failed to get definition' });

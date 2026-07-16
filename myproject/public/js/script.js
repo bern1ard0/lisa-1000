@@ -144,11 +144,26 @@ async function defineText(word) {
             throw new Error(`Server error: ${response.statusText}`);
         }
         const data = await response.json();
-        return data.definition;
+        return data;
     } catch (error) {
         console.error('Error getting definition:', error);
         return null;
     }
+}
+
+// Build popup HTML for a definition entry (word, phonetic, audio, meanings)
+function renderDefinition(entry) {
+    const meanings = (entry.meanings && entry.meanings.length)
+        ? entry.meanings.map(m => `<p><em>${m.partOfSpeech}</em> — ${m.definition}${m.example ? `<br><span class="def-example">"${m.example}"</span>` : ''}</p>`).join('')
+        : `<p>${(entry.definition || '').replace(/\n/g, '<br>')}</p>`;
+    const audio = entry.audioUrl
+        ? `<button class="pronounce-btn" onclick="new Audio('${entry.audioUrl}').play()">🔊 Pronounce</button>`
+        : '';
+    return `
+        <h2>${entry.word || 'Definition'}</h2>
+        ${entry.phonetic ? `<p class="phonetic">${entry.phonetic}</p>` : ''}
+        ${audio}
+        ${meanings}`;
 }
 
 // Function to translate text
@@ -185,12 +200,9 @@ async function handleDoubleClick() {
                 }
             }
         } else {
-            const definition = await defineText(selectedText);
-            if (definition) {
-                showPopup(`
-                    <h2>Definition</h2>
-                    <p>${definition}</p>
-                `);
+            const entry = await defineText(selectedText);
+            if (entry) {
+                showPopup(renderDefinition(entry));
             }
         }
     }
@@ -262,9 +274,15 @@ async function translateStory() {
     }
 
     if (targetLanguage && targetLanguage !== 'default') {
-        const translatedStory = await translateText(storyText, targetLanguage);
-        if (translatedStory) {
-            storyContentElement.textContent = translatedStory;  // Update only the text content
+        const btn = document.getElementById('translateButton');
+        if (btn) btn.disabled = true;
+        try {
+            const translatedStory = await translateText(storyText, targetLanguage);
+            if (translatedStory) {
+                storyContentElement.textContent = translatedStory;  // Update only the text content
+            }
+        } finally {
+            if (btn) btn.disabled = false;
         }
     }
 }

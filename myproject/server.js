@@ -200,22 +200,17 @@ app.post('/generate-story', async (req, res) => {
             .split('|')
             .map((part) => part.trim());
 
-        const generation = await higgsfield.subscribe('/v1/text2image/soul', {
-            input: {
-                prompt: (imagePrompt || story).substring(0, 1000),
-                width_and_height: '1536x1536',
-                quality: '1080p',
-                batch_size: 1,
-                enhance_prompt: true,
-            },
-            withPolling: true,
+        // Image via OpenAI DALL-E 3 for now. To switch back to Higgsfield Soul
+        // (needs platform.higgsfield.ai developer keys in HF_CREDENTIALS):
+        // higgsfield.subscribe('/v1/text2image/soul', { input: { prompt, ... }, withPolling: true })
+        const imageResponse = await openai.images.generate({
+            model: 'dall-e-3',
+            prompt: (imagePrompt || story).substring(0, 1000),
+            n: 1,
+            size: '1024x1024',
         });
 
-        if (generation.status !== 'completed' || !generation.images?.length) {
-            throw new Error(`Higgsfield image generation ${generation.status}`);
-        }
-
-        res.json({ story, imageUrl: generation.images[0].url });
+        res.json({ story, imageUrl: imageResponse.data[0].url });
     } catch (error) {
         console.error('Error generating story and image:', error);
         res.status(500).send({ error: 'Failed to generate story and image' });

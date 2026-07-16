@@ -208,9 +208,9 @@ export default {
         const url = new URL(request.url);
         const path = url.pathname;
         const method = request.method;
-        const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
         try {
+            const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
             if (method === 'POST') {
                 const body = await request.json().catch(() => ({}));
 
@@ -230,7 +230,9 @@ export default {
             return json({ error: 'Not found' }, 404);
         } catch (error) {
             console.error(`Error handling ${method} ${path}:`, error);
-            return json({ error: 'Internal error' }, 500);
+            // Surface the underlying cause so failures are debuggable from the
+            // browser Network tab (no key material is ever in these messages).
+            return json({ error: 'Internal error', detail: String(error?.message || error) }, 500);
         }
     },
 };

@@ -11,5 +11,17 @@
     "compatibility_flags": ["nodejs_compat"],
     "assets": {
         "directory": "./public"
-    }
+    },
+    // D1 database (schema: docs/SCHEMA.md, migrations: worker/migrations/).
+    // One-time setup:
+    //   npx wrangler d1 create lisa1000        -> paste the database_id below
+    //   npx wrangler d1 migrations apply lisa1000 --remote
+    "d1_databases": [
+        {
+            "binding": "DB",
+            "database_name": "lisa1000",
+            "database_id": "REPLACE_WITH_DATABASE_ID",
+            "migrations_dir": "worker/migrations"
+        }
+    ]
 }

@@ -11,6 +11,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 const CLAUDE_MODEL = 'claude-sonnet-5'; // swap to 'claude-haiku-4-5' (cheaper) or 'claude-opus-4-8' (higher quality)
+const OPENAI_TEXT_MODEL = 'gpt-4o'; // fallback only, when Claude is down — swap to 'gpt-4o-mini' for a cheaper (lower quality) fallback
 const HIGGSFIELD_BASE = 'https://platform.higgsfield.ai';
 
 function json(data, status = 200) {
@@ -57,17 +58,73 @@ async function lookupDictionary(word) {
     return { word: entry.word, phonetic, audioUrl, meanings };
 }
 
-async function defineWithClaude(anthropic, word) {
-    const message = await anthropic.messages.create({
-        model: CLAUDE_MODEL,
-        max_tokens: 1024,
-        system: 'You are a Dictionary that provides definitions for words in a simple and clear manner plus example use case. You return In Dictionary Format.',
-        messages: [{ role: 'user', content: `Define the word "${word}".` }],
-    });
-    return { word, definition: claudeText(message), phonetic: '', audioUrl: '', meanings: [], source: 'claude' };
+// ---------- Claude with an OpenAI fallback ----------
+// The Anthropic SDK already retries transient failures (maxRetries: 5 on the
+// client below); this is the next line of defense for when Claude is down
+// for longer than the retry window can cover — a different provider entirely,
+// rather than trying the same one again.
+
+// Anthropic APIError exposes `.status`; some failures (like the 529
+// "Overloaded" seen in practice) surface with the status folded into the
+// message instead, so check both.
+function isRetryableClaudeError(error) {
+    const status = error?.status;
+    if (status === 429 || (status >= 500 && status < 600)) return true;
+    return /overloaded|529|rate.?limit/i.test(String(error?.message || error));
 }
 
-async function handleDefinition(anthropic, word) {
+async function openaiChatText(env, system, prompt, maxTokens) {
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            model: OPENAI_TEXT_MODEL,
+            max_tokens: maxTokens,
+            messages: [
+                { role: 'system', content: system },
+                { role: 'user', content: prompt },
+            ],
+        }),
+    });
+    if (!resp.ok) throw new Error(`OpenAI fallback failed (${resp.status}): ${await resp.text()}`);
+    const data = await resp.json();
+    const text = data.choices?.[0]?.message?.content?.trim();
+    if (!text) throw new Error('OpenAI returned no text');
+    return text;
+}
+
+// Try Claude; if it fails with a retryable error and an OpenAI key is
+// configured, retry the same prompt against OpenAI instead.
+async function generateText(env, anthropic, { system, prompt, maxTokens }) {
+    try {
+        const message = await anthropic.messages.create({
+            model: CLAUDE_MODEL,
+            max_tokens: maxTokens,
+            system,
+            messages: [{ role: 'user', content: prompt }],
+        });
+        return { text: claudeText(message), provider: 'claude' };
+    } catch (error) {
+        if (!env.OPENAI_API_KEY || !isRetryableClaudeError(error)) throw error;
+        console.error('Claude unavailable, falling back to OpenAI:', error.message);
+        const text = await openaiChatText(env, system, prompt, maxTokens);
+        return { text, provider: 'openai' };
+    }
+}
+
+async function defineWithClaude(env, anthropic, word) {
+    const { text, provider } = await generateText(env, anthropic, {
+        system: 'You are a Dictionary that provides definitions for words in a simple and clear manner plus example use case. You return In Dictionary Format.',
+        prompt: `Define the word "${word}".`,
+        maxTokens: 1024,
+    });
+    return { word, definition: text, phonetic: '', audioUrl: '', meanings: [], source: provider };
+}
+
+async function handleDefinition(env, anthropic, word) {
     if (!word) return json({ error: 'No word provided' }, 400);
 
     if (/^[a-zA-Z'-]+$/.test(word.trim())) {
@@ -84,23 +141,22 @@ async function handleDefinition(anthropic, word) {
         }
     }
 
-    return json(await defineWithClaude(anthropic, word));
+    return json(await defineWithClaude(env, anthropic, word));
 }
 
-async function handleTranslate(anthropic, body) {
+async function handleTranslate(env, anthropic, body) {
     const { text, targetLanguage } = body;
     if (!text || !targetLanguage) {
         return json({ error: 'Text or target language not provided' }, 400);
     }
 
-    const message = await anthropic.messages.create({
-        model: CLAUDE_MODEL,
-        max_tokens: 8192,
+    const { text: translatedText } = await generateText(env, anthropic, {
         system: 'You are a helpful assistant that translates text. Reply with the translation only — no preamble.',
-        messages: [{ role: 'user', content: `Translate the following text to ${targetLanguage}: ${text}` }],
+        prompt: `Translate the following text to ${targetLanguage}: ${text}`,
+        maxTokens: 8192,
     });
 
-    return json({ translatedText: claudeText(message) });
+    return json({ translatedText });
 }
 
 // ---------- Text-to-speech (ElevenLabs streaming, OpenAI fallback) ----------
@@ -244,14 +300,13 @@ async function handleGenerateStory(env, anthropic, body) {
     const prompt = body.prompt;
     if (!prompt) return json({ error: 'No prompt provided' }, 400);
 
-    const message = await anthropic.messages.create({
-        model: CLAUDE_MODEL,
-        max_tokens: 8192,
+    const { text } = await generateText(env, anthropic, {
         system: STORY_SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: prompt }],
+        prompt,
+        maxTokens: 8192,
     });
 
-    const parts = claudeText(message).split('|').map((part) => part.trim());
+    const parts = text.split('|').map((part) => part.trim());
     // Expected: [story, narration, imagePrompt] — tolerate a missing narration part.
     const story = parts[0] || '';
     const narration = parts.length >= 3 ? parts[1] : story;
@@ -484,8 +539,8 @@ export default {
             if (method === 'POST') {
                 const body = await request.json().catch(() => ({}));
 
-                if (path === '/definition') return await handleDefinition(anthropic, body.word);
-                if (path === '/translate') return await handleTranslate(anthropic, body);
+                if (path === '/definition') return await handleDefinition(env, anthropic, body.word);
+                if (path === '/translate') return await handleTranslate(env, anthropic, body);
                 if (path === '/generate-speech' || path === '/api/synthesize-speech') {
                     return await handleSpeech(env, body);
                 }
@@ -501,7 +556,7 @@ export default {
                 }
                 if (path.startsWith('/definition/')) {
                     const word = decodeURIComponent(path.slice('/definition/'.length));
-                    return await handleDefinition(anthropic, word);
+                    return await handleDefinition(env, anthropic, word);
                 }
             }
 

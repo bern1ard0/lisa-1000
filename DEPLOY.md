@@ -32,7 +32,7 @@ goes to lisa1000.com.
    npx wrangler d1 migrations apply lisa1000 --remote   # schema + seed stories (docs/SCHEMA.md)
    npx wrangler secret put ANTHROPIC_API_KEY   # Claude: stories, definitions, translation
    npx wrangler secret put ELEVENLABS_API_KEY  # ElevenLabs streaming narration (Lisa & Adam voices)
-   npx wrangler secret put OPENAI_API_KEY      # story images + TTS fallback
+   npx wrangler secret put OPENAI_API_KEY      # story images, TTS fallback, and Claude fallback
    npx wrangler secret put HF_CREDENTIALS      # Higgsfield "KEY_ID:KEY_SECRET" for illustrations
    ```
 

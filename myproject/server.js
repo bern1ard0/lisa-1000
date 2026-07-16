@@ -20,6 +20,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetr
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const CLAUDE_MODEL = 'claude-sonnet-5'; // swap to 'claude-haiku-4-5' (cheaper) or 'claude-opus-4-8' (higher quality)
+const OPENAI_TEXT_MODEL = 'gpt-4o'; // fallback only, when Claude is down — swap to 'gpt-4o-mini' for a cheaper (lower quality) fallback
 
 // Extract the plain text from a Claude response (skips thinking blocks).
 function claudeText(message) {
@@ -32,6 +33,46 @@ function claudeText(message) {
         throw new Error(`Claude returned no text (stop_reason: ${message.stop_reason})`);
     }
     return text;
+}
+
+// ---------- Claude with an OpenAI fallback ----------
+// The rule is simple: if Anthropic isn't working — for any reason — use
+// OpenAI. The Anthropic SDK retries transient failures first (maxRetries: 5
+// above); anything that still fails switches provider.
+
+async function openaiChatText(system, prompt, maxTokens) {
+    const completion = await openai.chat.completions.create({
+        model: OPENAI_TEXT_MODEL,
+        max_tokens: maxTokens,
+        messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: prompt },
+        ],
+    });
+    const text = completion.choices?.[0]?.message?.content?.trim();
+    if (!text) throw new Error('OpenAI returned no text');
+    return text;
+}
+
+// Try Claude; if it fails for any reason and an OpenAI key is configured,
+// run the same prompt against OpenAI instead.
+async function generateText({ system, prompt, maxTokens }) {
+    try {
+        const message = await anthropic.messages.create({
+            model: CLAUDE_MODEL,
+            max_tokens: maxTokens,
+            system,
+            messages: [{ role: 'user', content: prompt }],
+        });
+        return { text: claudeText(message), provider: 'claude' };
+    } catch (error) {
+        if (!process.env.OPENAI_API_KEY) throw error;
+        // Still logged so a config problem (e.g. bad Anthropic key) is
+        // visible in the logs even while OpenAI keeps the site alive.
+        console.error('Claude unavailable, falling back to OpenAI:', error.message);
+        const text = await openaiChatText(system, prompt, maxTokens);
+        return { text, provider: 'openai' };
+    }
 }
 
 
@@ -85,16 +126,13 @@ app.post('/definition', async (req, res) => {
 
     // Fallback: phrases, non-English words, or anything the dictionary missed
     try {
-        const message = await anthropic.messages.create({
-            model: CLAUDE_MODEL,
-            max_tokens: 1024,
+        const { text, provider } = await generateText({
             system: 'You are a Dictionary that provides definitions for words in a simple and clear manner plus example use case. You return In Dictionary Format.',
-            messages: [
-                { role: 'user', content: `Define the word "${word}".` }
-            ]
+            prompt: `Define the word "${word}".`,
+            maxTokens: 1024,
         });
 
-        res.json({ word, definition: claudeText(message), phonetic: '', audioUrl: '', meanings: [], source: 'claude' });
+        res.json({ word, definition: text, phonetic: '', audioUrl: '', meanings: [], source: provider });
     } catch (error) {
         console.error('Error getting definition:', error);
         res.status(500).json({ error: 'Failed to get definition' });
@@ -111,16 +149,13 @@ app.post('/translate', async (req, res) => {
     }
 
     try {
-        const message = await anthropic.messages.create({
-            model: CLAUDE_MODEL,
-            max_tokens: 8192,
+        const { text: translatedText } = await generateText({
             system: 'You are a helpful assistant that translates text. Reply with the translation only — no preamble.',
-            messages: [
-                { role: 'user', content: `Translate the following text to ${targetLanguage}: ${text}` }
-            ]
+            prompt: `Translate the following text to ${targetLanguage}: ${text}`,
+            maxTokens: 8192,
         });
 
-        res.json({ translatedText: claudeText(message) });
+        res.json({ translatedText });
     } catch (error) {
         console.error('Error translating text:', error);
         res.status(500).json({ error: 'Failed to translate text' });
@@ -219,16 +254,13 @@ app.get('/definition/:word', async (req, res) => {
     const word = req.params.word;
 
     try {
-        const message = await anthropic.messages.create({
-            model: CLAUDE_MODEL,
-            max_tokens: 1024,
+        const { text } = await generateText({
             system: 'You are a helpful assistant that provides definitions for words.',
-            messages: [
-                { role: 'user', content: `Define the word "${word}" in a simple and clear manner plus example use case.` }
-            ]
+            prompt: `Define the word "${word}" in a simple and clear manner plus example use case.`,
+            maxTokens: 1024,
         });
 
-        res.json({ definition: claudeText(message) });
+        res.json({ definition: text });
     } catch (error) {
         console.error('Error getting definition:', error);
         res.status(500).json({ error: 'Failed to get definition' });
@@ -243,20 +275,17 @@ app.post('/generate-story', async (req, res) => {
         return res.status(400).send({ error: 'No prompt provided' });
     }
     try {
-        const message = await anthropic.messages.create({
-            model: CLAUDE_MODEL,
-            max_tokens: 8192,
+        const { text } = await generateText({
             system: 'You are a helpful assistant designed to write short stories. Output plain text in exactly this format: story|narration|imagePrompt. '
                 + 'The story is the clean text shown to the reader. '
                 + 'The narration is the SAME story with inline emotional delivery cues in square brackets placed before the phrases they affect — e.g. [warmly], [excited], [whispers], [sighs], [laughs] — for an expressive text-to-speech narrator. '
                 + 'The imagePrompt is a highly detailed illustration prompt for the story. '
                 + 'Output exactly two "|" characters separating the three parts, and nothing else.',
-            messages: [
-                { role: 'user', content: prompt }
-            ]
+            prompt,
+            maxTokens: 8192,
         });
 
-        const parts = claudeText(message).split('|').map((part) => part.trim());
+        const parts = text.split('|').map((part) => part.trim());
         // Expected: [story, narration, imagePrompt] — tolerate a missing narration part.
         const story = parts[0] || '';
         const narration = parts.length >= 3 ? parts[1] : story;

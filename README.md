@@ -49,7 +49,7 @@ To get started with Lisa 1000, follow these steps:
       ANTHROPIC_API_KEY=your_anthropic_api_key      # Claude: stories, definitions, translation
       HF_CREDENTIALS=your_key_id:your_key_secret    # Higgsfield: image generation
       ELEVENLABS_API_KEY=your_elevenlabs_api_key    # ElevenLabs: streaming narration (Lisa & Adam voices)
-      OPENAI_API_KEY=your_openai_api_key            # OpenAI: story images + TTS fallback
+      OPENAI_API_KEY=your_openai_api_key            # OpenAI: story images, TTS fallback, and Claude fallback
       ```
 
 5. **Start the server**:

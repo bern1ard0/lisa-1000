@@ -3,19 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Library</title>
+    <title>Library · Lisa 1000</title>
     <link rel="stylesheet" href="css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <header>
         <div class="nav-container">
+            <a href="index.html" class="brand"><span class="brand-mark">✦</span>LISA 1000</a>
             <nav>
                 <ul>
                     <li><a href="index.html">Home</a></li>
                     <li><a href="library.html">Library</a></li>
-                    <li><a href="create-story.html">Create Story</a></li> <!-- Add Create Story tab -->
-                    <li>   
+                    <li><a href="create-story.html">Create Story</a></li>
+                    <li>
                         <select id="nativeLanguage">
                             <option value="default">I speak...</option>
                             <option value="en">English</option>
@@ -34,17 +36,22 @@
                 </ul>
             </nav>
         </div>
-        <div>
-            <h1>Library</h1>
+        <div class="page-header">
+            <h1>The Library</h1>
+            <p>Every story, beautifully illustrated — pick one and start reading.</p>
         </div>
-        
     </header>
-    
+
     <main id="story-list">
         <!-- Stories will be loaded here dynamically -->
     </main>
     <footer>
-        <button id="aboutButton">About Us</button>
+        <span class="footer-brand">✦ LISA 1000</span>
+        <div class="footer-links">
+            <button id="aboutButton">About Us</button>
+            <a href="index.html">Home</a>
+            <a href="create-story.html">Create story</a>
+        </div>
     </footer>
     <script src="js/loadStories.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>

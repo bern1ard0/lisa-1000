@@ -127,7 +127,27 @@ async function handleSpeech(env, body) {
     });
 }
 
+// OpenAI DALL-E 3 text-to-image (current image provider).
+async function generateIllustrationOpenAI(env, prompt) {
+    const resp = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: '1024x1024' }),
+    });
+    if (!resp.ok) {
+        throw new Error(`OpenAI image generation failed (${resp.status}): ${await resp.text()}`);
+    }
+    const data = await resp.json();
+    const url = data.data?.[0]?.url;
+    if (!url) throw new Error('OpenAI image generation returned no URL');
+    return url;
+}
+
 // Higgsfield Soul text-to-image via REST: submit, then poll to completion.
+// Kept for when HF_CREDENTIALS (platform.higgsfield.ai developer keys) are set up.
 async function generateIllustration(env, prompt) {
     const auth = { 'Authorization': `Key ${env.HF_CREDENTIALS}`, 'Content-Type': 'application/json' };
 
@@ -179,7 +199,7 @@ async function handleGenerateStory(env, anthropic, body) {
         .split('|')
         .map((part) => part.trim());
 
-    const imageUrl = await generateIllustration(env, (imagePrompt || story).substring(0, 1000));
+    const imageUrl = await generateIllustrationOpenAI(env, (imagePrompt || story).substring(0, 1000));
     return json({ story, imageUrl });
 }
 

@@ -105,7 +105,7 @@ To get started with Lisa 1000, follow these steps:
 
 ## Performance Note
 
-The 10 story cover images in `myproject/public/images/covers/` are ~2 MB PNGs each (~20 MB if a visitor scrolls the full library). They are lazy-loaded, so only on-screen covers are fetched, but before public launch they should be converted to WebP (~150 KB each) or served through an image CDN.
+The 10 story covers in `myproject/public/images/covers/` are served as WebP (~150-250 KB each, converted from the ~2 MB generated PNGs) and lazy-loaded, so only on-screen covers are fetched. Newly generated story images come from Higgsfield's CDN at full size — consider the same WebP/resize treatment (or an image CDN) if they're ever persisted.
 
 ## Course Project Reflection
 

@@ -82,11 +82,22 @@ async function defineText(word) {
     }
 }
 
+// Convert the lightweight markdown Claude returns (## headings, **bold**) to HTML
+function formatDefinitionText(text) {
+    return (text || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/^#{1,4}\s*(.+)$/gm, '<h4>$1</h4>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n{2,}/g, '<br>')
+        .replace(/\n/g, '<br>')
+        .replace(/<\/h4><br>/g, '</h4>');
+}
+
 // Build popup HTML for a definition entry (word, phonetic, audio, meanings)
 function renderDefinition(entry) {
     const meanings = (entry.meanings && entry.meanings.length)
         ? entry.meanings.map(m => `<p><em>${m.partOfSpeech}</em> — ${m.definition}${m.example ? `<br><span class="def-example">"${m.example}"</span>` : ''}</p>`).join('')
-        : `<p>${(entry.definition || '').replace(/\n/g, '<br>')}</p>`;
+        : `<div class="def-body">${formatDefinitionText(entry.definition)}</div>`;
     const audio = entry.audioUrl
         ? `<button class="pronounce-btn" onclick="new Audio('${entry.audioUrl}').play()">🔊 Pronounce</button>`
         : '';

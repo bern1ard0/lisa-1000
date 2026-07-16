@@ -85,6 +85,31 @@ function cycleText() {
 
 window.onload = cycleText;
 
+// Parallax: stars drift away from the cursor, scaled by their depth
+document.addEventListener('DOMContentLoaded', function() {
+    const starField = document.getElementById('star-field');
+    if (!starField) return;
+    const stars = starField.querySelectorAll('[data-depth]');
+    window.addEventListener('mousemove', function(e) {
+        const r = starField.getBoundingClientRect();
+        const dx = (e.clientX - (r.left + r.width / 2)) / r.width;
+        const dy = (e.clientY - (r.top + r.height / 2)) / r.height;
+        stars.forEach(star => {
+            const depth = parseFloat(star.getAttribute('data-depth'));
+            star.style.transform = `translate(${(dx * depth * -26).toFixed(1)}px, ${(dy * depth * -18).toFixed(1)}px)`;
+        });
+    });
+});
+
+// Small toast-style notice (SweetAlert2 when available, alert() otherwise)
+function notifyUser(title, text) {
+    if (window.Swal) {
+        Swal.fire({ icon: 'info', title: title, text: text, confirmButtonColor: '#8B5CF6' });
+    } else {
+        alert(title + '\n' + text);
+    }
+}
+
 // Function to read the story aloud
 async function readStoryAloud(text, voice) {
     try {
@@ -151,11 +176,22 @@ async function defineText(word) {
     }
 }
 
+// Convert the lightweight markdown Claude returns (## headings, **bold**) to HTML
+function formatDefinitionText(text) {
+    return (text || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/^#{1,4}\s*(.+)$/gm, '<h4>$1</h4>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n{2,}/g, '<br>')
+        .replace(/\n/g, '<br>')
+        .replace(/<\/h4><br>/g, '</h4>');
+}
+
 // Build popup HTML for a definition entry (word, phonetic, audio, meanings)
 function renderDefinition(entry) {
     const meanings = (entry.meanings && entry.meanings.length)
         ? entry.meanings.map(m => `<p><em>${m.partOfSpeech}</em> — ${m.definition}${m.example ? `<br><span class="def-example">"${m.example}"</span>` : ''}</p>`).join('')
-        : `<p>${(entry.definition || '').replace(/\n/g, '<br>')}</p>`;
+        : `<div class="def-body">${formatDefinitionText(entry.definition)}</div>`;
     const audio = entry.audioUrl
         ? `<button class="pronounce-btn" onclick="new Audio('${entry.audioUrl}').play()">🔊 Pronounce</button>`
         : '';
@@ -261,7 +297,7 @@ function showTranslation(selectedText, translation) {
 async function translateStory() {
     const translationToggle = document.getElementById('translation-toggle').classList.contains('active');
     if (!translationToggle) {
-        console.log('Translation toggle is not active. Translation not triggered.');
+        notifyUser('Turn on Translate mode', 'Click the T toggle in the navigation bar to enable translation, then press Translate again.');
         return;
     }
 
@@ -271,6 +307,11 @@ async function translateStory() {
 
     if (targetLanguage === 'other') {
         targetLanguage = document.getElementById('otherLanguage').value.trim();
+    }
+
+    if (!targetLanguage || targetLanguage === 'default') {
+        notifyUser('Pick your language', 'Choose your language in the "I speak…" dropdown so we know what to translate into.');
+        return;
     }
 
     if (targetLanguage && targetLanguage !== 'default') {

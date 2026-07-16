@@ -1,3 +1,12 @@
+// Small toast-style notice (SweetAlert2 when available, alert() otherwise)
+function notifyUser(title, text) {
+    if (window.Swal) {
+        Swal.fire({ icon: 'info', title: title, text: text, confirmButtonColor: '#8B5CF6' });
+    } else {
+        alert(title + '\n' + text);
+    }
+}
+
 function languageName(lang, otherLanguage) {
     switch (lang) {
         case 'fr': return 'French';
@@ -228,10 +237,19 @@ document.addEventListener('DOMContentLoaded', function() {
         readStoryAloud(storyText, selectedVoice);
     });
     translateButton.addEventListener('click', async function() {
+        const translationToggle = document.getElementById('translation-toggle').classList.contains('active');
+        if (!translationToggle) {
+            notifyUser('Turn on Translate mode', 'Click the T toggle in the navigation bar to enable translation, then press Translate again.');
+            return;
+        }
         const storyText = document.getElementById('story-content').textContent;
         let targetLanguage = document.getElementById('nativeLanguage').value;
         if (targetLanguage === 'other') {
             targetLanguage = document.getElementById('otherLanguage').value.trim();
+        }
+        if (!targetLanguage || targetLanguage === 'default') {
+            notifyUser('Pick your language', 'Choose your language in the "I speak…" dropdown so we know what to translate into.');
+            return;
         }
         if (targetLanguage && targetLanguage !== 'default') {
             translateButton.disabled = true;
@@ -330,11 +348,22 @@ async function defineText(word) {
     }
 }
 
+// Convert the lightweight markdown Claude returns (## headings, **bold**) to HTML
+function formatDefinitionText(text) {
+    return (text || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/^#{1,4}\s*(.+)$/gm, '<h4>$1</h4>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n{2,}/g, '<br>')
+        .replace(/\n/g, '<br>')
+        .replace(/<\/h4><br>/g, '</h4>');
+}
+
 // Build popup HTML for a definition entry (word, phonetic, audio, meanings)
 function renderDefinition(entry) {
     const meanings = (entry.meanings && entry.meanings.length)
         ? entry.meanings.map(m => `<p><em>${m.partOfSpeech}</em> — ${m.definition}${m.example ? `<br><span class="def-example">"${m.example}"</span>` : ''}</p>`).join('')
-        : `<p>${(entry.definition || '').replace(/\n/g, '<br>')}</p>`;
+        : `<div class="def-body">${formatDefinitionText(entry.definition)}</div>`;
     const audio = entry.audioUrl
         ? `<button class="pronounce-btn" onclick="new Audio('${entry.audioUrl}').play()">🔊 Pronounce</button>`
         : '';

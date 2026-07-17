@@ -25,7 +25,7 @@ goes to lisa1000.com.
    | Local dev | `myproject/.dev.vars` (gitignored — never committed) | copy `.dev.vars.example` → `.dev.vars`, fill in values |
    | Production | Cloudflare encrypted secrets | `npx wrangler secret put <NAME>` (paste value when prompted) |
 
-   Set all three production secrets:
+   Set all production secrets:
    ```bash
    npx wrangler r2 bucket create lisa1000-media # once; or dashboard: R2 -> Create bucket
    npx wrangler d1 create lisa1000             # once; paste database_id into wrangler.jsonc
@@ -34,6 +34,8 @@ goes to lisa1000.com.
    npx wrangler secret put ELEVENLABS_API_KEY  # ElevenLabs streaming narration (Lisa & Adam voices)
    npx wrangler secret put OPENAI_API_KEY      # story images, TTS fallback, and Claude fallback
    npx wrangler secret put HF_CREDENTIALS      # Higgsfield "KEY_ID:KEY_SECRET" for illustrations
+   npx wrangler secret put GOOGLE_CLIENT_ID     # Google OAuth sign-in (see below)
+   npx wrangler secret put GOOGLE_CLIENT_SECRET # Google OAuth sign-in (see below)
    ```
 
    Rules of thumb:
@@ -43,6 +45,18 @@ goes to lisa1000.com.
      your own copy in a password manager.
    - The `HF_CREDENTIALS` value is a Higgsfield **API key pair** from
      platform.higgsfield.ai (developer keys) — not your higgsfield.ai website login.
+
+   **Creating the Google OAuth client** (for `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`):
+   1. [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services →
+      Credentials → Create Credentials → OAuth client ID.
+   2. Application type: **Web application**.
+   3. Authorized redirect URIs — add both:
+      - `https://<your-domain>/auth/callback` (production, e.g. `https://lisa1000.com/auth/callback`)
+      - `http://localhost:8787/auth/callback` (local dev via `npm run dev`)
+   4. Save, then copy the Client ID and Client Secret into `npx wrangler secret put`
+      above (production) and `.dev.vars` (local — see below).
+   5. The `sessions` table (`0005_sessions.sql`) ships with the `d1 migrations
+      apply` step above — no separate step needed.
 
 3. **First deploy:**
    ```bash

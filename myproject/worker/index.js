@@ -7,6 +7,8 @@
 //   ELEVENLABS_API_KEY   text-to-speech (streaming narration)
 //   OPENAI_API_KEY       images + TTS fallback when ElevenLabs is unavailable
 //   HF_CREDENTIALS       Higgsfield "KEY_ID:KEY_SECRET" (story illustrations)
+//   GOOGLE_CLIENT_ID     Google OAuth sign-in (/auth/login, /auth/callback)
+//   GOOGLE_CLIENT_SECRET Google OAuth sign-in — paired with GOOGLE_CLIENT_ID
 
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -424,6 +426,166 @@ async function handleGetWork(env, id) {
     });
 }
 
+// ---------- Auth (Google OAuth + D1 sessions) ----------
+// Sign-in is Google-only: no passwords are ever stored. A session is a
+// random token whose SHA-256 lives in D1; the cookie carries the raw token.
+
+function bytesToHex(bytes) {
+    return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function randomHex(byteLength) {
+    return bytesToHex(crypto.getRandomValues(new Uint8Array(byteLength)));
+}
+
+async function sha256Hex(text) {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return bytesToHex(new Uint8Array(digest));
+}
+
+// Read a single cookie value from the request's Cookie header.
+function getCookie(request, name) {
+    const header = request.headers.get('Cookie');
+    if (!header) return null;
+    const match = header.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
+// GET /auth/login — send the browser to Google's consent screen.
+async function handleAuthLogin(env, url) {
+    if (!env.GOOGLE_CLIENT_ID || !env.DB) return json({ error: 'Sign-in not configured' }, 501);
+
+    const state = randomHex(32);
+    const params = new URLSearchParams({
+        client_id: env.GOOGLE_CLIENT_ID,
+        redirect_uri: `${url.origin}/auth/callback`,
+        response_type: 'code',
+        scope: 'openid email profile',
+        state,
+    });
+
+    return new Response(null, {
+        status: 302,
+        headers: {
+            'Location': `https://accounts.google.com/o/oauth2/v2/auth?${params}`,
+            'Set-Cookie': `oauth_state=${state}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`,
+        },
+    });
+}
+
+// Find or create the user for a Google email. Handles are derived from the
+// email's local part; a handle collision gets one retry with a random suffix.
+async function upsertUserForEmail(env, email) {
+    const existing = await env.DB.prepare('SELECT id, handle, email FROM users WHERE email = ?').bind(email).first();
+    if (existing) return existing;
+
+    const id = `u_${crypto.randomUUID()}`;
+    const local = email.split('@')[0].toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const handle = local || 'user';
+    const now = Math.floor(Date.now() / 1000);
+
+    try {
+        await env.DB.prepare(
+            'INSERT INTO users (id, handle, email, created_at) VALUES (?, ?, ?, ?)'
+        ).bind(id, handle, email, now).run();
+        return { id, handle, email };
+    } catch (error) {
+        // handle already taken — retry once with a short random suffix
+        const suffixed = `${handle}-${randomHex(2)}`;
+        await env.DB.prepare(
+            'INSERT INTO users (id, handle, email, created_at) VALUES (?, ?, ?, ?)'
+        ).bind(id, suffixed, email, now).run();
+        return { id, handle: suffixed, email };
+    }
+}
+
+// GET /auth/callback — exchange the code, upsert the user, start a session.
+async function handleAuthCallback(env, request, url) {
+    if (!env.GOOGLE_CLIENT_ID || !env.DB) return json({ error: 'Sign-in not configured' }, 501);
+
+    const state = url.searchParams.get('state');
+    const code = url.searchParams.get('code');
+    if (!state || state !== getCookie(request, 'oauth_state')) {
+        return json({ error: 'OAuth state mismatch — start again at /auth/login' }, 400);
+    }
+
+    const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            code,
+            client_id: env.GOOGLE_CLIENT_ID,
+            client_secret: env.GOOGLE_CLIENT_SECRET,
+            redirect_uri: `${url.origin}/auth/callback`,
+            grant_type: 'authorization_code',
+        }),
+    });
+    if (!tokenResp.ok) {
+        console.error('Google token exchange failed:', tokenResp.status, await tokenResp.text());
+        return json({ error: 'Google sign-in failed' }, 502);
+    }
+
+    const { id_token: idToken } = await tokenResp.json();
+    // Decode the JWT payload only — no signature check. The token came
+    // straight from Google's token endpoint over TLS, so its origin is
+    // already authenticated.
+    const payload = JSON.parse(atob(idToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    // sub and name aren't persisted — users has no matching columns yet.
+    const { sub, email, name, email_verified: emailVerified } = payload;
+
+    if (!email || emailVerified === false) {
+        return json({ error: 'Google account has no verified email' }, 403);
+    }
+
+    const user = await upsertUserForEmail(env, email);
+
+    const rawToken = randomHex(32);
+    const tokenHash = await sha256Hex(rawToken);
+    const now = Math.floor(Date.now() / 1000);
+    const expiresAt = now + 30 * 24 * 60 * 60;
+    await env.DB.prepare(
+        'INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)'
+    ).bind(tokenHash, user.id, now, expiresAt).run();
+
+    const headers = new Headers({ 'Location': '/' });
+    headers.append('Set-Cookie', `session=${rawToken}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=2592000`);
+    headers.append('Set-Cookie', 'oauth_state=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0');
+    return new Response(null, { status: 302, headers });
+}
+
+// Resolve the signed-in user (or null) from the `session` cookie.
+async function getSessionUser(env, request) {
+    if (!env.DB) return null;
+    const raw = getCookie(request, 'session');
+    if (!raw) return null;
+
+    const tokenHash = await sha256Hex(raw);
+    const now = Math.floor(Date.now() / 1000);
+    const user = await env.DB.prepare(
+        `SELECT u.id, u.handle, u.email FROM sessions s
+         JOIN users u ON u.id = s.user_id
+         WHERE s.token_hash = ? AND s.expires_at > ?`
+    ).bind(tokenHash, now).first();
+    return user || null;
+}
+
+// GET /api/me
+async function handleMe(env, request) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+    return json({ user: await getSessionUser(env, request) });
+}
+
+// POST /auth/logout — always succeeds; clears the cookie either way.
+async function handleAuthLogout(env, request) {
+    const raw = getCookie(request, 'session');
+    if (raw && env.DB) {
+        await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256Hex(raw)).run();
+    }
+    const headers = new Headers({ 'Content-Type': 'application/json' });
+    headers.append('Set-Cookie', 'session=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0');
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+}
+
 // ---------- Media storage (R2) ----------
 
 // Decode a data:image/... URL and store it in the MEDIA bucket.
@@ -573,6 +735,7 @@ export default {
                 }
                 if (path === '/generate-story') return await handleGenerateStory(env, anthropic, body);
                 if (path === '/api/works') return await handleCreateWork(env, body);
+                if (path === '/auth/logout') return await handleAuthLogout(env, request);
             }
 
             if (method === 'GET') {
@@ -585,6 +748,9 @@ export default {
                     const word = decodeURIComponent(path.slice('/definition/'.length));
                     return await handleDefinition(env, anthropic, word);
                 }
+                if (path === '/auth/login') return await handleAuthLogin(env, url);
+                if (path === '/auth/callback') return await handleAuthCallback(env, request, url);
+                if (path === '/api/me') return await handleMe(env, request);
             }
 
             return json({ error: 'Not found' }, 404);

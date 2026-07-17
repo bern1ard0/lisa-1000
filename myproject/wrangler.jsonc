@@ -1,9 +1,13 @@
 // Cloudflare Worker configuration for Lisa 1000
 // - Static frontend served from ./public (same files Express serves)
 // - API routes handled by worker/index.js
-// Secrets (ANTHROPIC_API_KEY, OPENAI_API_KEY, HF_CREDENTIALS) are NOT set here:
+// Secrets (ANTHROPIC_API_KEY, OPENAI_API_KEY, HF_CREDENTIALS,
+// GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) are NOT set here:
 //   local dev  -> .dev.vars file (gitignored)
 //   production -> `npx wrangler secret put <NAME>`
+// GOOGLE_CLIENT_ID/SECRET come from a Google Cloud OAuth client (Web
+// application) with authorized redirect URIs for both environments — see
+// DEPLOY.md for the full walkthrough.
 {
     "name": "lisa1000",
     "main": "worker/index.js",

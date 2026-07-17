@@ -5,8 +5,20 @@ function buildStoryCard(mainElement, { title, image, excerpt, href }) {
     card.className = 'story-card story-card-link';
     card.addEventListener('click', () => { window.location.href = href; });
 
-    // Cover image, with a lettered placeholder if the file is missing
+    // Cover artwork, never cropped: letterboxed in a 16:9 frame whose sides
+    // are a blurred copy of the same image. Lettered placeholder if missing.
+    const frame = document.createElement('div');
+    frame.className = 'cover-frame card-cover';
+
+    const coverBg = document.createElement('img');
+    coverBg.className = 'cover-frame-bg';
+    coverBg.src = image || '';
+    coverBg.alt = '';
+    coverBg.setAttribute('aria-hidden', 'true');
+    coverBg.loading = 'lazy';
+
     const cover = document.createElement('img');
+    cover.className = 'cover-frame-fg';
     cover.src = image || '';
     cover.alt = `${title} cover`;
     cover.loading = 'lazy';
@@ -14,9 +26,12 @@ function buildStoryCard(mainElement, { title, image, excerpt, href }) {
         const placeholder = document.createElement('div');
         placeholder.className = 'cover-placeholder';
         placeholder.textContent = title.charAt(0);
-        this.replaceWith(placeholder);
+        frame.replaceWith(placeholder);
     };
-    card.appendChild(cover);
+
+    frame.appendChild(coverBg);
+    frame.appendChild(cover);
+    card.appendChild(frame);
 
     const body = document.createElement('div');
     body.className = 'card-body';

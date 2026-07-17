@@ -253,6 +253,13 @@ CREATE TABLE animation_clips (
 Animations **reference** the work's scenes via clips — they never copy them.
 Ten renders of one work share the same scene data.
 
+**Product note (monetization):** finished animations are the premium surface.
+They are listed publicly in the Animate tab but shown **fully blurred** until
+the viewer has an account and an active subscription — the blur is the
+paywall. (The same `.cover-frame` blur technique used for library covers
+provides the visual language.) Requires `users` + subscription state; noted
+here so nothing in the schema blocks it.
+
 ---
 
 ## 3. Relationship map

@@ -63,6 +63,8 @@ async function renderStory() {
     const titleEl = document.getElementById('story-title');
     const contentEl = document.getElementById('story-content');
     const coverEl = document.getElementById('story-cover');
+    const coverBgEl = document.getElementById('story-cover-bg');
+    const coverWrapEl = document.getElementById('story-cover-wrap');
 
     const story = await fetchStory();
     if (!story) {
@@ -78,10 +80,13 @@ async function renderStory() {
     titleEl.textContent = story.title;
     contentEl.innerHTML = story.paragraphs.map((p) => `<p>${p}</p>`).join('');
     if (story.cover) {
+        // Full artwork, never cropped: the cover is letterboxed inside a
+        // 16:9 frame whose sides are a blurred copy of the same image.
         coverEl.src = story.cover;
+        coverBgEl.src = story.cover;
         coverEl.alt = `${story.title} cover`;
-        coverEl.classList.remove('hidden');
-        coverEl.onerror = () => coverEl.classList.add('hidden');
+        coverWrapEl.classList.remove('hidden');
+        coverEl.onerror = () => coverWrapEl.classList.add('hidden');
     }
 }
 

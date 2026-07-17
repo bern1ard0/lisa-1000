@@ -236,6 +236,12 @@ async function handleSpeech(env, body) {
 
 // OpenAI GPT Image text-to-image (current image provider).
 // GPT Image models return base64, not a hosted URL, so we hand back a data URL.
+// House art style for every illustration — matches the original 10 story
+// covers. The model supplies only the scene; the style is enforced here.
+const IMAGE_STYLE_PREFIX =
+    "Children's storybook illustration, warm whimsical hand-painted style, " +
+    'soft colors, gentle light, painterly gouache texture, cozy and friendly: ';
+
 async function generateIllustrationOpenAI(env, prompt) {
     const resp = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
@@ -243,7 +249,7 @@ async function generateIllustrationOpenAI(env, prompt) {
             'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model: 'gpt-image-2', prompt, size: '1024x1024' }),
+        body: JSON.stringify({ model: 'gpt-image-2', prompt: IMAGE_STYLE_PREFIX + prompt, size: '1024x1024' }),
     });
     if (!resp.ok) {
         throw new Error(`OpenAI image generation failed (${resp.status}): ${await resp.text()}`);
@@ -292,11 +298,12 @@ async function generateIllustration(env, prompt) {
 }
 
 const STORY_SYSTEM_PROMPT =
+    'LISA 1000 is a language-learning product for young children and educators. Everything you write MUST be appropriate for children aged 4-10: kind, gentle, and positive, with simple vocabulary. Absolutely no violence, horror, romance, or adult themes. If the request asks for unsuitable content, do not refuse — instead write a gentle, age-appropriate story on the nearest safe theme. ' +
     'You are a helpful assistant designed to write short stories. Output plain text in exactly this format: title|story|narration|imagePrompt. ' +
     'The title is a short, evocative story title (a few words, no quotes). ' +
     'The story is the clean text shown to the reader. It must NOT repeat the title. ' +
     'The narration is the SAME story with inline emotional delivery cues in square brackets placed before the phrases they affect — e.g. [warmly], [excited], [whispers], [sighs], [laughs] — for an expressive text-to-speech narrator. ' +
-    'The imagePrompt is a highly detailed illustration prompt for the story. ' +
+    'The imagePrompt describes only the SCENE to illustrate (characters, setting, moment) — no art style, which is applied automatically. ' +
     'Output exactly three "|" characters separating the four parts, and nothing else — no labels, no markdown.';
 
 // Split a title|story|narration|imagePrompt response, tolerating models that

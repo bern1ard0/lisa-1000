@@ -305,7 +305,13 @@ app.get('/definition/:word', async (req, res) => {
 });
 
 
-// Endpoint for generating a story (Claude) and an illustration (Higgsfield Soul)
+// House art style for every illustration — matches the original 10 story
+// covers. The model supplies only the scene; the style is enforced here.
+const IMAGE_STYLE_PREFIX =
+    "Children's storybook illustration, warm whimsical hand-painted style, " +
+    'soft colors, gentle light, painterly gouache texture, cozy and friendly: ';
+
+// Endpoint for generating a story and an illustration
 app.post('/generate-story', async (req, res) => {
     const prompt = req.body.prompt;
     if (!prompt) {
@@ -313,11 +319,12 @@ app.post('/generate-story', async (req, res) => {
     }
     try {
         const { text } = await generateText({
-            system: 'You are a helpful assistant designed to write short stories. Output plain text in exactly this format: title|story|narration|imagePrompt. '
+            system: 'LISA 1000 is a language-learning product for young children and educators. Everything you write MUST be appropriate for children aged 4-10: kind, gentle, and positive, with simple vocabulary. Absolutely no violence, horror, romance, or adult themes. If the request asks for unsuitable content, do not refuse — instead write a gentle, age-appropriate story on the nearest safe theme. '
+                + 'You are a helpful assistant designed to write short stories. Output plain text in exactly this format: title|story|narration|imagePrompt. '
                 + 'The title is a short, evocative story title (a few words, no quotes). '
                 + 'The story is the clean text shown to the reader. It must NOT repeat the title. '
                 + 'The narration is the SAME story with inline emotional delivery cues in square brackets placed before the phrases they affect — e.g. [warmly], [excited], [whispers], [sighs], [laughs] — for an expressive text-to-speech narrator. '
-                + 'The imagePrompt is a highly detailed illustration prompt for the story. '
+                + 'The imagePrompt describes only the SCENE to illustrate (characters, setting, moment) — no art style, which is applied automatically. '
                 + 'Output exactly three "|" characters separating the four parts, and nothing else — no labels, no markdown.',
             prompt,
             maxTokens: 8192,
@@ -330,7 +337,7 @@ app.post('/generate-story', async (req, res) => {
         // higgsfield.subscribe('/v1/text2image/soul', { input: { prompt, ... }, withPolling: true })
         const imageResponse = await openai.images.generate({
             model: 'gpt-image-2',
-            prompt: (imagePrompt || story).substring(0, 1000),
+            prompt: IMAGE_STYLE_PREFIX + (imagePrompt || story).substring(0, 1000),
             size: '1024x1024',
         });
 

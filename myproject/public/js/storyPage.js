@@ -24,11 +24,13 @@ async function fetchStory() {
             if (resp.ok) {
                 const work = await resp.json();
                 return {
+                    id: work.id, // present only for a real saved work — gates the narration cache below
                     title: work.title,
                     cover: work.cover_image_url,
                     paragraphs: (work.scenes || []).map((s) => s.display_text),
                     narration: (work.scenes || []).map((s) => s.narration_text || s.display_text).join('\n'),
                     language: work.language || 'en',
+                    visibility: work.visibility,
                 };
             }
         } catch (error) {
@@ -79,6 +81,14 @@ async function renderStory() {
     document.title = `${story.title} · Lisa 1000`;
     titleEl.textContent = story.title;
     contentEl.innerHTML = story.paragraphs.map((p) => `<p>${p}</p>`).join('');
+
+    // Share is only meaningful for a saved work a stranger can actually
+    // reach — public or unlisted. Private works and unsaved/seed stories
+    // (no visibility at all) keep the button hidden.
+    const shareButton = document.getElementById('shareButton');
+    if (shareButton) {
+        shareButton.classList.toggle('hidden', !(story.id && (story.visibility === 'public' || story.visibility === 'unlisted')));
+    }
     if (story.cover) {
         // Full artwork, never cropped: the cover is letterboxed inside a
         // 16:9 frame whose sides are a blurred copy of the same image.
@@ -90,6 +100,103 @@ async function renderStory() {
     }
 }
 
+// ---------- Narration cache + word highlighting (saved works only) ----------
+// A saved work (has an id) can be narrated once and replayed for free via
+// /api/works/:id/narration. Freshly-generated, unsaved stories have no id
+// and keep using the live-streaming path in tts.js unchanged.
+
+// Per-page cache so re-clicking Play never refetches even once the server
+// cache (D1 + R2) is already warm: workId:voiceKey -> narration response.
+const narrationCache = new Map();
+
+// Strip punctuation and case for word matching — "Roxy," and "roxy" match.
+function normalizeWord(w) {
+    return (w || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+// Zip the displayed words against the timestamped narration words. Narration
+// text can diverge slightly from display text (delivery cues, punctuation),
+// so this is best-effort: pointers always advance together in lockstep —
+// no attempt to re-sync after a mismatch.
+function alignWords(displayWords, timestampWords) {
+    const n = Math.min(displayWords.length, timestampWords.length);
+    const aligned = new Array(displayWords.length).fill(null);
+    for (let i = 0; i < n; i++) {
+        aligned[i] = timestampWords[i];
+    }
+    return aligned;
+}
+
+// Wrap every word of the rendered story text in a <span>, returning the
+// words in reading order (for alignWords) alongside their span elements.
+function wrapStoryWordsForHighlight(contentEl) {
+    const words = [];
+    let idx = 0;
+    contentEl.querySelectorAll('p').forEach((p) => {
+        p.innerHTML = p.textContent.replace(/\S+/g, (word) => {
+            const span = `<span class="story-word" data-w="${idx++}">${word}</span>`;
+            words.push(word);
+            return span;
+        });
+    });
+    return { words, spans: [...contentEl.querySelectorAll('.story-word')] };
+}
+
+// Drive .word-active off audio playback. Word timings are chronological, so
+// an advancing pointer (no per-frame re-scan) is enough.
+function attachWordHighlighting(audio, spans, aligned) {
+    let current = -1;
+    const clear = () => { if (current >= 0 && spans[current]) spans[current].classList.remove('word-active'); };
+    audio.addEventListener('timeupdate', () => {
+        const t = audio.currentTime;
+        let next = current;
+        while (next + 1 < aligned.length && aligned[next + 1] && t >= aligned[next + 1].s) next++;
+        if (next !== current) {
+            clear();
+            current = next;
+            if (current >= 0 && spans[current]) spans[current].classList.add('word-active');
+        }
+    });
+    audio.addEventListener('ended', clear);
+}
+
+// Fetch (or reuse) the cached narration for a saved work + voice. Resolves
+// null on any failure so the caller falls back to live streaming silently.
+async function fetchNarration(workId, voiceKey) {
+    const cacheKey = `${workId}:${voiceKey}`;
+    if (narrationCache.has(cacheKey)) return narrationCache.get(cacheKey);
+    try {
+        const resp = await fetch(`/api/works/${encodeURIComponent(workId)}/narration?voice=${encodeURIComponent(voiceKey)}`);
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        narrationCache.set(cacheKey, data);
+        return data;
+    } catch (error) {
+        console.warn('Narration cache unavailable, falling back to streaming:', error);
+        return null;
+    }
+}
+
+// Play a saved work's cached narration, highlighting words as they're
+// spoken. Returns false (without throwing) when the cache endpoint fails,
+// so the caller can fall back to the streaming path.
+async function playCachedNarration(workId, voiceKey) {
+    const data = await fetchNarration(workId, voiceKey);
+    if (!data || !data.audio_url) return false;
+
+    const audio = new Audio(data.audio_url);
+    const words = data.timestamps?.words;
+    if (words && words.length) {
+        const contentEl = document.getElementById('story-content');
+        const { words: displayWords, spans } = wrapStoryWordsForHighlight(contentEl);
+        attachWordHighlighting(audio, spans, alignWords(displayWords, words));
+    }
+
+    await audio.play();
+    await new Promise((resolve) => { audio.onended = resolve; audio.onerror = resolve; });
+    return true;
+}
+
 // ---------- Reader controls ----------
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -99,18 +206,40 @@ document.addEventListener('DOMContentLoaded', function () {
     const readButton = document.getElementById('readButton');
     const recordButton = document.getElementById('recordButton');
     const translateButton = document.getElementById('translateButton');
+    const shareButton = document.getElementById('shareButton');
 
     readButton.addEventListener('click', async function () {
         if (!currentStoryData) return;
-        const text = `${currentStoryData.title}. ${currentStoryData.narration}`;
         readButton.disabled = true;
         try {
+            // Saved works: try the cache first (instant on replay, highlights
+            // words). Any endpoint failure falls through to live streaming.
+            if (currentStoryData.id && await playCachedNarration(currentStoryData.id, voiceDropdown.value)) {
+                return;
+            }
+            const text = `${currentStoryData.title}. ${currentStoryData.narration}`;
             await streamSpeech(text, voiceDropdown.value, window.currentStoryLanguage);
         } catch (error) {
             console.error('Error reading story aloud:', error);
             notifyUser('Could not play narration', 'Please try again in a moment.');
         } finally {
             readButton.disabled = false;
+        }
+    });
+
+    shareButton.addEventListener('click', async function () {
+        if (!currentStoryData || !currentStoryData.id) return;
+        const shareUrl = `${window.location.origin}/s/${encodeURIComponent(currentStoryData.id)}`;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(shareUrl);
+                notifyUser('Link copied', 'Anyone with this link can read the story.');
+            } catch (error) {
+                console.warn('Clipboard write failed, falling back to prompt:', error);
+                prompt('Copy this link to share the story:', shareUrl);
+            }
+        } else {
+            prompt('Copy this link to share the story:', shareUrl);
         }
     });
 

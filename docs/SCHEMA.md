@@ -240,6 +240,10 @@ CREATE TABLE narrations (
 );
 ```
 
+`timestamps_json` stores a compact per-word shape — `{words:[{w,s,e}]}` (word
+text, start/end seconds) — computed server-side from ElevenLabs' per-character
+alignment; the R2 key convention is `narrations/<work_id>/<voice_id>/<language>.mp3`.
+
 ### animations
 A render of a work — first-class, owned, and listed in the Animate tab.
 
@@ -348,10 +352,10 @@ For `kind: "story"`, `characters` may be empty and `lines` may be omitted —
 | Library: sad / happy | join `work_emotions` on `emotion` |
 | "Hear this voice" previews | `voices.preview_audio_url` |
 | Language voice bank | voice resolution rule (§2 voices) |
-| Replay without credits | `narrations` cache hit |
-| Word highlight / subtitles / scene sync | `narrations.timestamps_json` |
+| Replay without credits | `narrations` cache hit — `GET /api/works/:id/narration` |
+| Word highlight / subtitles / scene sync | `narrations.timestamps_json` — word highlight implemented client-side; subtitles/scene sync can reuse the same word offsets |
 | Promote story → play | Claude transform of the interchange JSON; same tables |
-| Social sharing / OG pages | `works` public page + `animations.video_url` asset |
+| Social sharing / OG pages | `GET /s/:id` share shell (public/unlisted `works`, OG/Twitter tags + redirect) — `animations.video_url` asset still future |
 
 ---
 

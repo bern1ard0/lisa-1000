@@ -275,14 +275,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 const detail = await resp.json().catch(() => ({}));
                 throw new Error(detail.error || `Save failed (${resp.status})`);
             }
+            const saved = await resp.json().catch(() => ({}));
+            const shareUrl = saved.id ? `${window.location.origin}/s/${encodeURIComponent(saved.id)}` : null;
             saveButton.textContent = '✓ Saved';
             notifyUser(
                 'Saved to Library',
-                visibility === 'public'
-                    ? 'Your story is now in the Library for everyone to read.'
-                    : visibility === 'private'
-                        ? 'Saved! Only you can view it.'
-                        : 'Saved! Only people with the link can view it (share pages coming soon).'
+                visibility === 'private'
+                    ? 'Saved! Only you can view it.'
+                    : (visibility === 'public'
+                        ? 'Your story is now in the Library for everyone to read.'
+                        : 'Saved! Only people with the link can view it.') +
+                        (shareUrl ? ` Share it: ${shareUrl}` : '')
             );
         } catch (error) {
             console.error('Error saving story:', error);

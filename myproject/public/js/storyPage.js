@@ -30,6 +30,7 @@ async function fetchStory() {
                     paragraphs: (work.scenes || []).map((s) => s.display_text),
                     narration: (work.scenes || []).map((s) => s.narration_text || s.display_text).join('\n'),
                     language: work.language || 'en',
+                    visibility: work.visibility,
                 };
             }
         } catch (error) {
@@ -80,6 +81,14 @@ async function renderStory() {
     document.title = `${story.title} · Lisa 1000`;
     titleEl.textContent = story.title;
     contentEl.innerHTML = story.paragraphs.map((p) => `<p>${p}</p>`).join('');
+
+    // Share is only meaningful for a saved work a stranger can actually
+    // reach — public or unlisted. Private works and unsaved/seed stories
+    // (no visibility at all) keep the button hidden.
+    const shareButton = document.getElementById('shareButton');
+    if (shareButton) {
+        shareButton.classList.toggle('hidden', !(story.id && (story.visibility === 'public' || story.visibility === 'unlisted')));
+    }
     if (story.cover) {
         // Full artwork, never cropped: the cover is letterboxed inside a
         // 16:9 frame whose sides are a blurred copy of the same image.
@@ -197,6 +206,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const readButton = document.getElementById('readButton');
     const recordButton = document.getElementById('recordButton');
     const translateButton = document.getElementById('translateButton');
+    const shareButton = document.getElementById('shareButton');
 
     readButton.addEventListener('click', async function () {
         if (!currentStoryData) return;
@@ -214,6 +224,22 @@ document.addEventListener('DOMContentLoaded', function () {
             notifyUser('Could not play narration', 'Please try again in a moment.');
         } finally {
             readButton.disabled = false;
+        }
+    });
+
+    shareButton.addEventListener('click', async function () {
+        if (!currentStoryData || !currentStoryData.id) return;
+        const shareUrl = `${window.location.origin}/s/${encodeURIComponent(currentStoryData.id)}`;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(shareUrl);
+                notifyUser('Link copied', 'Anyone with this link can read the story.');
+            } catch (error) {
+                console.warn('Clipboard write failed, falling back to prompt:', error);
+                prompt('Copy this link to share the story:', shareUrl);
+            }
+        } else {
+            prompt('Copy this link to share the story:', shareUrl);
         }
     });
 

@@ -355,7 +355,7 @@ For `kind: "story"`, `characters` may be empty and `lines` may be omitted —
 | Replay without credits | `narrations` cache hit — `GET /api/works/:id/narration` |
 | Word highlight / subtitles / scene sync | `narrations.timestamps_json` — word highlight implemented client-side; subtitles/scene sync can reuse the same word offsets |
 | Promote story → play | Claude transform of the interchange JSON; same tables |
-| Social sharing / OG pages | `works` public page + `animations.video_url` asset |
+| Social sharing / OG pages | `GET /s/:id` share shell (public/unlisted `works`, OG/Twitter tags + redirect) — `animations.video_url` asset still future |
 
 ---
 

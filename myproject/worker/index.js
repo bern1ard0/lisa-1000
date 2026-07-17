@@ -531,6 +531,101 @@ async function handleListWorks(env, url, sessionUser) {
     });
 }
 
+// Escape text for safe placement inside an HTML attribute or element body.
+function escapeHtml(text) {
+    return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Truncate to ~160 chars on a word boundary for an og:description, appending
+// an ellipsis. Short text passes through untouched.
+function truncateDescription(text, limit = 160) {
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (clean.length <= limit) return clean;
+    const cut = clean.slice(0, limit);
+    const lastSpace = cut.lastIndexOf(' ');
+    const boundary = lastSpace > 0 ? cut.slice(0, lastSpace) : cut;
+    return `${boundary.trimEnd()}…`;
+}
+
+// Absolutize a cover URL against the request origin. Handles relative
+// `/media/...` and legacy `images/...` seed-cover paths as well as full
+// http(s) URLs (returned as-is). Returns null for anything else (e.g. a
+// stray data: URL that never should have been persisted).
+function absolutizeCoverUrl(origin, coverUrl) {
+    if (!coverUrl || typeof coverUrl !== 'string') return null;
+    if (/^https?:\/\//i.test(coverUrl)) return coverUrl;
+    if (coverUrl.startsWith('/')) return `${origin}${coverUrl}`;
+    return `${origin}/${coverUrl}`;
+}
+
+// GET /s/:id — server-rendered share shell for a saved work: crawler-facing
+// Open Graph/Twitter meta tags plus a human redirect into the real reader
+// (story.html). Serves 'public' and 'unlisted' works only — a share link is
+// for strangers by definition, so there's no owner exception, and 'private'/
+// missing works get the same plain 404 as handleGetWork so existence is
+// never revealed.
+async function handleSharePage(env, url, id) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+
+    const work = await env.DB.prepare('SELECT * FROM works WHERE id = ?').bind(id).first();
+    if (!work || (work.visibility !== 'public' && work.visibility !== 'unlisted')) {
+        return json({ error: 'Work not found' }, 404);
+    }
+
+    const firstScene = await env.DB.prepare(
+        'SELECT display_text FROM scenes WHERE work_id = ? ORDER BY idx LIMIT 1'
+    ).bind(id).first();
+
+    const title = work.title || 'A story';
+    const description = truncateDescription(firstScene?.display_text || '');
+    const shareUrl = `${url.origin}/s/${encodeURIComponent(id)}`;
+    const readerUrl = `/story.html?id=${encodeURIComponent(id)}`;
+    const imageUrl = absolutizeCoverUrl(url.origin, work.cover_image_url);
+
+    const safeTitle = escapeHtml(title);
+    const safeDescription = escapeHtml(description);
+    const pageTitle = escapeHtml(`${title} — LISA 1000`);
+
+    const metaTags = [
+        `<meta property="og:type" content="article">`,
+        `<meta property="og:site_name" content="LISA 1000">`,
+        `<meta property="og:title" content="${safeTitle}">`,
+        `<meta property="og:description" content="${safeDescription}">`,
+        `<meta property="og:url" content="${escapeHtml(shareUrl)}">`,
+    ];
+    if (imageUrl) metaTags.push(`<meta property="og:image" content="${escapeHtml(imageUrl)}">`);
+    metaTags.push(`<meta name="twitter:card" content="${imageUrl ? 'summary_large_image' : 'summary'}">`);
+    metaTags.push(`<meta name="twitter:title" content="${safeTitle}">`);
+    metaTags.push(`<meta name="twitter:description" content="${safeDescription}">`);
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${pageTitle}</title>
+<meta http-equiv="refresh" content="0;url=${escapeHtml(readerUrl)}">
+${metaTags.join('\n')}
+<script>location.replace(${JSON.stringify(readerUrl)});</script>
+</head>
+<body>
+<p>Redirecting… <a href="${escapeHtml(readerUrl)}">Read this story on LISA 1000</a></p>
+</body>
+</html>`;
+
+    return new Response(html, {
+        status: 200,
+        headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'public, max-age=300',
+        },
+    });
+}
+
 // GET /api/works/:id — full work: scenes (with lines), cast, emotions.
 async function handleGetWork(env, id, sessionUser) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
@@ -935,6 +1030,9 @@ export default {
 
             if (method === 'GET') {
                 if (path.startsWith('/media/')) return await handleMedia(env, path);
+                if (path.startsWith('/s/')) {
+                    return await handleSharePage(env, url, decodeURIComponent(path.slice('/s/'.length)));
+                }
                 if (path === '/api/works') return await handleListWorks(env, url, await getSessionUser(env, request));
                 if (path.startsWith('/api/works/') && path.endsWith('/narration')) {
                     const id = decodeURIComponent(path.slice('/api/works/'.length, -'/narration'.length));

@@ -349,15 +349,15 @@ async function handleGenerateStory(env, anthropic, body) {
 
 // GET /api/works?kind=&genre=&owner=&emotion=&character=
 // Library listing with every filter from the schema's feature->query map.
-async function handleListWorks(env, url) {
+async function handleListWorks(env, url, sessionUser) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
 
     const p = url.searchParams;
-    // Listings only ever show public works. Once auth ships this becomes
-    // (visibility = 'public' OR owner_id = :viewer); 'unlisted' works are
-    // reachable by direct id but never listed; 'private' never leaves the DB.
-    const where = ["w.visibility = 'public'"];
-    const binds = [];
+    // Listings show public works, plus the viewer's own (any visibility) when
+    // signed in; 'unlisted' works are otherwise reachable by direct id but
+    // never listed; 'private' never leaves the DB except to its owner.
+    const where = sessionUser ? ["(w.visibility = 'public' OR w.owner_id = ?)"] : ["w.visibility = 'public'"];
+    const binds = sessionUser ? [sessionUser.id] : [];
 
     if (p.get('kind'))  { where.push('w.kind = ?');     binds.push(p.get('kind')); }
     if (p.get('genre')) { where.push('w.genre = ?');    binds.push(p.get('genre')); }
@@ -375,7 +375,7 @@ async function handleListWorks(env, url) {
 
     const sql = `
         SELECT w.id, w.kind, w.title, w.genre, w.language, w.length, w.owner_id,
-               w.cover_image_url, w.created_at,
+               w.visibility, w.cover_image_url, w.created_at,
                (SELECT s.display_text FROM scenes s
                 WHERE s.work_id = w.id ORDER BY s.idx LIMIT 1) AS excerpt,
                (SELECT GROUP_CONCAT(we.emotion) FROM work_emotions we
@@ -392,15 +392,17 @@ async function handleListWorks(env, url) {
 }
 
 // GET /api/works/:id — full work: scenes (with lines), cast, emotions.
-async function handleGetWork(env, id) {
+async function handleGetWork(env, id, sessionUser) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
 
-    // Direct fetch serves public AND unlisted (share links); private works are
-    // indistinguishable from missing ones until auth can prove ownership.
-    const work = await env.DB.prepare(
-        "SELECT * FROM works WHERE id = ? AND visibility IN ('public','unlisted')"
-    ).bind(id).first();
+    // Fetched without a visibility filter so ownership can be checked below;
+    // direct fetch serves public AND unlisted (share links). A private work
+    // is served only to its owner — anyone else gets the same 404 as a
+    // missing work, so its existence is never revealed.
+    const work = await env.DB.prepare('SELECT * FROM works WHERE id = ?').bind(id).first();
     if (!work) return json({ error: 'Work not found' }, 404);
+    const ownedByViewer = sessionUser && sessionUser.id === work.owner_id;
+    if (work.visibility === 'private' && !ownedByViewer) return json({ error: 'Work not found' }, 404);
 
     const [scenes, lines, cast, emotions] = await Promise.all([
         env.DB.prepare('SELECT * FROM scenes WHERE work_id = ? ORDER BY idx').bind(id).all(),
@@ -451,6 +453,12 @@ function getCookie(request, name) {
     return match ? decodeURIComponent(match[1]) : null;
 }
 
+// A same-origin, non-protocol-relative path: '/foo' is fine, '//evil.com' is
+// browser shorthand for a scheme-relative URL and must be rejected.
+function isSafeNextPath(path) {
+    return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//');
+}
+
 // GET /auth/login — send the browser to Google's consent screen.
 async function handleAuthLogin(env, url) {
     if (!env.GOOGLE_CLIENT_ID || !env.DB) return json({ error: 'Sign-in not configured' }, 501);
@@ -464,13 +472,16 @@ async function handleAuthLogin(env, url) {
         state,
     });
 
-    return new Response(null, {
-        status: 302,
-        headers: {
-            'Location': `https://accounts.google.com/o/oauth2/v2/auth?${params}`,
-            'Set-Cookie': `oauth_state=${state}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`,
-        },
-    });
+    const headers = new Headers({ 'Location': `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
+    headers.append('Set-Cookie', `oauth_state=${state}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`);
+    // Where to send the browser back after sign-in (e.g. the save-gated page
+    // that sent them here). Only same-origin paths are trusted.
+    const next = url.searchParams.get('next');
+    if (isSafeNextPath(next)) {
+        headers.append('Set-Cookie', `oauth_next=${encodeURIComponent(next)}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`);
+    }
+
+    return new Response(null, { status: 302, headers });
 }
 
 // Find or create the user for a Google email. Handles are derived from the
@@ -547,9 +558,13 @@ async function handleAuthCallback(env, request, url) {
         'INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)'
     ).bind(tokenHash, user.id, now, expiresAt).run();
 
-    const headers = new Headers({ 'Location': '/' });
+    const rawNext = getCookie(request, 'oauth_next');
+    const next = isSafeNextPath(rawNext) ? rawNext : '/';
+
+    const headers = new Headers({ 'Location': next });
     headers.append('Set-Cookie', `session=${rawToken}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=2592000`);
     headers.append('Set-Cookie', 'oauth_state=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0');
+    headers.append('Set-Cookie', 'oauth_next=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0');
     return new Response(null, { status: 302, headers });
 }
 
@@ -581,6 +596,36 @@ async function handleAuthLogout(env, request) {
     if (raw && env.DB) {
         await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256Hex(raw)).run();
     }
+    const headers = new Headers({ 'Content-Type': 'application/json' });
+    headers.append('Set-Cookie', 'session=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0');
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+}
+
+// DELETE /api/me — permanently delete the signed-in account and everything
+// it owns. One batch, FK-safe order: animations (covers renders the user
+// made on other people's works, since animations.owner_id is the renderer
+// not the work owner) before works (whose scenes/emotions/cast rows cascade
+// via ON DELETE CASCADE, and which also cascade-delete animations rendered
+// BY OTHERS on the user's own works), then the user's other owned rows,
+// then sessions, then the user row itself. 'lisa' and 'guest' are reserved
+// system users with no sessions, so they can never reach this handler.
+async function handleDeleteMe(env, request) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+
+    const sessionUser = await getSessionUser(env, request);
+    if (!sessionUser) return json({ error: 'Not signed in' }, 401);
+
+    const uid = sessionUser.id;
+    await env.DB.batch([
+        env.DB.prepare('DELETE FROM animations WHERE owner_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM works WHERE owner_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM characters WHERE owner_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM settings WHERE owner_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM voices WHERE owner_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM users WHERE id = ?').bind(uid),
+    ]);
+
     const headers = new Headers({ 'Content-Type': 'application/json' });
     headers.append('Set-Cookie', 'session=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0');
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
@@ -618,11 +663,16 @@ async function handleMedia(env, path) {
 }
 
 // POST /api/works — persist a generated story into the library.
-// Pre-auth, works are owned by the 'guest' system user; the client offers
-// 'public' or 'unlisted'. 'private' arrives with accounts (a private guest
-// work would be orphaned — nobody could ever retrieve it).
-async function handleCreateWork(env, body) {
+// Saving requires a signed-in owner. The 'guest' system user (migration
+// 0004) is legacy-only now: existing guest-owned rows keep working, but
+// nothing new is written there — a logged-out visitor gets a 401 instead.
+async function handleCreateWork(env, request, body) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
+
+    const sessionUser = await getSessionUser(env, request);
+    if (!sessionUser) return json({ error: 'Log in to save stories' }, 401);
+    const ownerId = sessionUser.id;
+    const allowedVisibility = ['private', 'unlisted', 'public'];
 
     const {
         kind = 'story',
@@ -638,8 +688,8 @@ async function handleCreateWork(env, body) {
 
     if (kind !== 'story') return json({ error: "Only kind 'story' can be saved for now" }, 400);
     if (typeof title !== 'string' || !title.trim()) return json({ error: 'A title is required' }, 400);
-    if (!['public', 'unlisted'].includes(visibility)) {
-        return json({ error: "visibility must be 'public' or 'unlisted' (private works arrive with accounts)" }, 400);
+    if (!allowedVisibility.includes(visibility)) {
+        return json({ error: "visibility must be 'private', 'unlisted', or 'public'" }, 400);
     }
     if (!Array.isArray(scenes) || scenes.length === 0) return json({ error: 'At least one scene is required' }, 400);
     if (scenes.length > 50) return json({ error: 'Too many scenes (max 50)' }, 400);
@@ -681,9 +731,10 @@ async function handleCreateWork(env, body) {
     const statements = [
         env.DB.prepare(
             `INSERT INTO works (id, owner_id, kind, title, genre, language, length, source, visibility, cover_image_url, created_at)
-             VALUES (?, 'guest', 'story', ?, ?, ?, ?, 'user', ?, ?, ?)`
+             VALUES (?, ?, 'story', ?, ?, ?, ?, 'user', ?, ?, ?)`
         ).bind(
             workId,
+            ownerId,
             title.trim().slice(0, 200),
             genre ? String(genre).trim().slice(0, 40).toLowerCase() : null,
             String(language).slice(0, 10),
@@ -734,15 +785,23 @@ export default {
                     return await handleSpeech(env, body);
                 }
                 if (path === '/generate-story') return await handleGenerateStory(env, anthropic, body);
-                if (path === '/api/works') return await handleCreateWork(env, body);
+                if (path === '/api/works') return await handleCreateWork(env, request, body);
                 if (path === '/auth/logout') return await handleAuthLogout(env, request);
+            }
+
+            if (method === 'DELETE') {
+                if (path === '/api/me') return await handleDeleteMe(env, request);
             }
 
             if (method === 'GET') {
                 if (path.startsWith('/media/')) return await handleMedia(env, path);
-                if (path === '/api/works') return await handleListWorks(env, url);
+                if (path === '/api/works') return await handleListWorks(env, url, await getSessionUser(env, request));
                 if (path.startsWith('/api/works/')) {
-                    return await handleGetWork(env, decodeURIComponent(path.slice('/api/works/'.length)));
+                    return await handleGetWork(
+                        env,
+                        decodeURIComponent(path.slice('/api/works/'.length)),
+                        await getSessionUser(env, request)
+                    );
                 }
                 if (path.startsWith('/definition/')) {
                     const word = decodeURIComponent(path.slice('/definition/'.length));

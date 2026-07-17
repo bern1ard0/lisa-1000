@@ -151,6 +151,134 @@ header { background: transparent; }
 
 #auth-nav .auth-link:hover { color: #fff; }
 
+#auth-nav .auth-google-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background-color: var(--bg-raise);
+    border: 1px solid var(--line-strong);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color 0.2s ease;
+}
+
+#auth-nav .auth-google-btn:hover { background-color: var(--line-strong); }
+
+/* ---------- Account menu (avatar + handle, dropdown) ---------- */
+.account-menu { position: relative; }
+
+.account-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px 6px 6px;
+    border-radius: 999px;
+    background-color: var(--bg-raise);
+    border: 1px solid var(--line-strong);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.account-toggle:hover { background-color: var(--line-strong); }
+
+.account-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--purple), var(--purple-deep));
+    border: 1px solid var(--line-strong);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.account-panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    min-width: 220px;
+    background: #171130;
+    border: 1px solid var(--line-strong);
+    border-radius: 16px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+    padding: 8px;
+    z-index: 60;
+    animation: fadeIn 0.15s;
+}
+
+.account-panel-header { padding: 10px 12px 8px; }
+
+.account-panel-handle { font-weight: 700; color: #fff; font-size: 15px; }
+
+.account-panel-email {
+    color: var(--text-faint);
+    font-size: 12px;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.account-divider { border: none; border-top: 1px solid var(--line); margin: 6px 4px; }
+
+.account-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 10px;
+    background: none;
+    border: none;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+    color: var(--text-muted);
+    box-sizing: border-box;
+}
+
+.account-item-action {
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.account-item-action:hover { background-color: var(--bg-raise); color: #fff; }
+
+.account-item-disabled { color: var(--text-faint); cursor: default; }
+
+.account-soon-tag {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    background: var(--bg-raise);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+.account-item-danger {
+    cursor: pointer;
+    color: #F87171;
+    transition: background-color 0.15s ease;
+}
+
+.account-item-danger:hover { background-color: rgba(248, 113, 113, 0.12); }
+
 .nav-container select#nativeLanguage {
     width: auto;
     min-width: 130px;
@@ -944,6 +1072,39 @@ fieldset.extras legend {
 }
 
 #story-cover-wrap.hidden { display: none; }
+
+/* Save button, signed out: grayed with a lock hint — still clickable, it
+   opens the log-in prompt rather than doing nothing. */
+button.ghost.save-locked {
+    opacity: 0.65;
+    border-color: rgba(196, 181, 253, 0.25);
+    color: var(--text-faint);
+}
+
+button.ghost.save-locked:hover {
+    opacity: 0.85;
+    color: var(--lavender);
+}
+
+/* Preview block inside the "log in to save" SweetAlert2 modal — same
+   blurred-copy language as .cover-frame-bg, standing in for the story
+   waiting behind the login wall. */
+.save-login-preview {
+    position: relative;
+    height: 72px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(160deg, var(--purple), var(--purple-deep));
+    margin-bottom: 14px;
+}
+
+.save-login-blur {
+    position: absolute;
+    inset: 0;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    background: rgba(11, 9, 24, 0.35);
+}
 
 .story-card-link { cursor: pointer; }
 

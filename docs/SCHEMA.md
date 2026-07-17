@@ -372,9 +372,17 @@ For `kind: "story"`, `characters` may be empty and `lines` may be omitted —
 
 - ~~Public/private visibility on `works`~~ **Resolved** (migration 0003):
   `works.visibility` — `private` (default) / `unlisted` / `public`; `lisa`
-  seeds are public. Listings return only `public` (later: `OR owner = viewer`);
-  direct fetch serves `public` + `unlisted`; `private` never leaves the DB.
-  Renders (narrations, animations) inherit the work's visibility.
+  seeds are public. Listings return `public` works plus the signed-in
+  viewer's own (any visibility); logged out, only `public`. Direct fetch
+  serves `public` + `unlisted` to anyone, `private` only to its owner —
+  everyone else gets the same 404 as a missing work. `POST /api/works`
+  now requires being signed in (401 otherwise) and always assigns the
+  session user as owner, any visibility including `private`; the `guest`
+  owner is legacy only — rows saved under it before this change keep
+  working, but nothing new is written there. Renders (narrations,
+  animations) inherit the work's visibility. `DELETE /api/me` deletes the
+  signed-in user and everything they own (works and their scenes, renders,
+  characters, settings, voices) in one FK-safe batch — irreversible.
 - Play audio mixing: stitch per-line clips server-side into one `narrations`
   file, or play sequential clips client-side? (Server-side stitch is simpler
   for replay + export; start there.)

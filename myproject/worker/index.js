@@ -453,6 +453,12 @@ function getCookie(request, name) {
     return match ? decodeURIComponent(match[1]) : null;
 }
 
+// A same-origin, non-protocol-relative path: '/foo' is fine, '//evil.com' is
+// browser shorthand for a scheme-relative URL and must be rejected.
+function isSafeNextPath(path) {
+    return typeof path === 'string' && path.startsWith('/') && !path.startsWith('//');
+}
+
 // GET /auth/login — send the browser to Google's consent screen.
 async function handleAuthLogin(env, url) {
     if (!env.GOOGLE_CLIENT_ID || !env.DB) return json({ error: 'Sign-in not configured' }, 501);
@@ -466,13 +472,16 @@ async function handleAuthLogin(env, url) {
         state,
     });
 
-    return new Response(null, {
-        status: 302,
-        headers: {
-            'Location': `https://accounts.google.com/o/oauth2/v2/auth?${params}`,
-            'Set-Cookie': `oauth_state=${state}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`,
-        },
-    });
+    const headers = new Headers({ 'Location': `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
+    headers.append('Set-Cookie', `oauth_state=${state}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`);
+    // Where to send the browser back after sign-in (e.g. the save-gated page
+    // that sent them here). Only same-origin paths are trusted.
+    const next = url.searchParams.get('next');
+    if (isSafeNextPath(next)) {
+        headers.append('Set-Cookie', `oauth_next=${encodeURIComponent(next)}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=600`);
+    }
+
+    return new Response(null, { status: 302, headers });
 }
 
 // Find or create the user for a Google email. Handles are derived from the
@@ -549,9 +558,13 @@ async function handleAuthCallback(env, request, url) {
         'INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)'
     ).bind(tokenHash, user.id, now, expiresAt).run();
 
-    const headers = new Headers({ 'Location': '/' });
+    const rawNext = getCookie(request, 'oauth_next');
+    const next = isSafeNextPath(rawNext) ? rawNext : '/';
+
+    const headers = new Headers({ 'Location': next });
     headers.append('Set-Cookie', `session=${rawToken}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=2592000`);
     headers.append('Set-Cookie', 'oauth_state=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0');
+    headers.append('Set-Cookie', 'oauth_next=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0');
     return new Response(null, { status: 302, headers });
 }
 
@@ -583,6 +596,36 @@ async function handleAuthLogout(env, request) {
     if (raw && env.DB) {
         await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256Hex(raw)).run();
     }
+    const headers = new Headers({ 'Content-Type': 'application/json' });
+    headers.append('Set-Cookie', 'session=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0');
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+}
+
+// DELETE /api/me — permanently delete the signed-in account and everything
+// it owns. One batch, FK-safe order: animations (covers renders the user
+// made on other people's works, since animations.owner_id is the renderer
+// not the work owner) before works (whose scenes/emotions/cast rows cascade
+// via ON DELETE CASCADE, and which also cascade-delete animations rendered
+// BY OTHERS on the user's own works), then the user's other owned rows,
+// then sessions, then the user row itself. 'lisa' and 'guest' are reserved
+// system users with no sessions, so they can never reach this handler.
+async function handleDeleteMe(env, request) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+
+    const sessionUser = await getSessionUser(env, request);
+    if (!sessionUser) return json({ error: 'Not signed in' }, 401);
+
+    const uid = sessionUser.id;
+    await env.DB.batch([
+        env.DB.prepare('DELETE FROM animations WHERE owner_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM works WHERE owner_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM characters WHERE owner_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM settings WHERE owner_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM voices WHERE owner_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(uid),
+        env.DB.prepare('DELETE FROM users WHERE id = ?').bind(uid),
+    ]);
+
     const headers = new Headers({ 'Content-Type': 'application/json' });
     headers.append('Set-Cookie', 'session=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0');
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
@@ -620,16 +663,16 @@ async function handleMedia(env, path) {
 }
 
 // POST /api/works — persist a generated story into the library.
-// Signed-in saves are owned by that user and may be 'private'. Logged-out
-// saves are owned by the 'guest' system user and stay 'public' or 'unlisted'
-// — a private guest work would be orphaned, since nobody could ever prove
-// ownership to retrieve it.
+// Saving requires a signed-in owner. The 'guest' system user (migration
+// 0004) is legacy-only now: existing guest-owned rows keep working, but
+// nothing new is written there — a logged-out visitor gets a 401 instead.
 async function handleCreateWork(env, request, body) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
 
     const sessionUser = await getSessionUser(env, request);
-    const ownerId = sessionUser ? sessionUser.id : 'guest';
-    const allowedVisibility = sessionUser ? ['private', 'unlisted', 'public'] : ['public', 'unlisted'];
+    if (!sessionUser) return json({ error: 'Log in to save stories' }, 401);
+    const ownerId = sessionUser.id;
+    const allowedVisibility = ['private', 'unlisted', 'public'];
 
     const {
         kind = 'story',
@@ -646,11 +689,7 @@ async function handleCreateWork(env, request, body) {
     if (kind !== 'story') return json({ error: "Only kind 'story' can be saved for now" }, 400);
     if (typeof title !== 'string' || !title.trim()) return json({ error: 'A title is required' }, 400);
     if (!allowedVisibility.includes(visibility)) {
-        return json({
-            error: sessionUser
-                ? "visibility must be 'private', 'unlisted', or 'public'"
-                : "visibility must be 'public' or 'unlisted' (visibility 'private' requires being logged in)",
-        }, 400);
+        return json({ error: "visibility must be 'private', 'unlisted', or 'public'" }, 400);
     }
     if (!Array.isArray(scenes) || scenes.length === 0) return json({ error: 'At least one scene is required' }, 400);
     if (scenes.length > 50) return json({ error: 'Too many scenes (max 50)' }, 400);
@@ -748,6 +787,10 @@ export default {
                 if (path === '/generate-story') return await handleGenerateStory(env, anthropic, body);
                 if (path === '/api/works') return await handleCreateWork(env, request, body);
                 if (path === '/auth/logout') return await handleAuthLogout(env, request);
+            }
+
+            if (method === 'DELETE') {
+                if (path === '/api/me') return await handleDeleteMe(env, request);
             }
 
             if (method === 'GET') {

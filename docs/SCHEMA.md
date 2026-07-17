@@ -376,10 +376,13 @@ For `kind: "story"`, `characters` may be empty and `lines` may be omitted —
   viewer's own (any visibility); logged out, only `public`. Direct fetch
   serves `public` + `unlisted` to anyone, `private` only to its owner —
   everyone else gets the same 404 as a missing work. `POST /api/works`
-  assigns the signed-in user as owner (any visibility, including `private`);
-  logged out it saves under the `guest` system user and only `public` /
-  `unlisted` are allowed, since a private guest work would be orphaned.
-  Renders (narrations, animations) inherit the work's visibility.
+  now requires being signed in (401 otherwise) and always assigns the
+  session user as owner, any visibility including `private`; the `guest`
+  owner is legacy only — rows saved under it before this change keep
+  working, but nothing new is written there. Renders (narrations,
+  animations) inherit the work's visibility. `DELETE /api/me` deletes the
+  signed-in user and everything they own (works and their scenes, renders,
+  characters, settings, voices) in one FK-safe batch — irreversible.
 - Play audio mixing: stitch per-line clips server-side into one `narrations`
   file, or play sequential clips client-side? (Server-side stitch is simpler
   for replay + export; start there.)

@@ -1,3 +1,7 @@
+// sessionStorage key for a generated story stashed while the visitor is
+// sent off to log in — see the saveButton click handler below.
+const PENDING_SAVE_KEY = 'lisa1000:pendingSave';
+
 // Small toast-style notice (SweetAlert2 when available, alert() otherwise)
 function notifyUser(title, text) {
     if (window.Swal) {
@@ -117,6 +121,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentNarration = null;
     // Everything needed to persist the on-screen story via POST /api/works.
     let currentStory = null;
+    // Refreshed from /api/me on load (and after a restored pending save);
+    // gates whether Save opens the visibility dialog or the log-in prompt.
+    let isLoggedIn = false;
 
     // Ensure the default voice is set to "Lisa" in the dropdown
     voiceDropdown.value = 'lisa';
@@ -125,6 +132,22 @@ document.addEventListener('DOMContentLoaded', function() {
         selectedVoice = voiceDropdown.value;
         console.log(`Selected voice: ${selectedVoice}`);
     });
+
+    // Save is never dead for a logged-out visitor — it just shows a lock
+    // hint and opens the log-in prompt instead of the visibility dialog.
+    function updateSaveButtonLockUI() {
+        const saveButton = document.getElementById('saveButton');
+        if (!saveButton || saveButton.disabled) return;
+        if (isLoggedIn) {
+            saveButton.classList.remove('save-locked');
+            saveButton.textContent = '💾 Save to Library';
+            saveButton.title = '';
+        } else {
+            saveButton.classList.add('save-locked');
+            saveButton.textContent = '🔒 Save to Library';
+            saveButton.title = 'Log in to save your story';
+        }
+    }
 
     function setCurrentStory(title, genre, language, storyData) {
         currentStory = {
@@ -135,9 +158,8 @@ document.addEventListener('DOMContentLoaded', function() {
             narration: storyData.narration || null,
             imageUrl: storyData.imageUrl || null,
         };
-        const saveButton = document.getElementById('saveButton');
-        saveButton.disabled = false;
-        saveButton.textContent = '💾 Save to Library';
+        document.getElementById('saveButton').disabled = false;
+        updateSaveButtonLockUI();
     }
 
     // Split a story into paragraph scenes; pair narration paragraphs with
@@ -154,29 +176,74 @@ document.addEventListener('DOMContentLoaded', function() {
         }));
     }
 
+    // Stash the generated story so it survives the round trip to Google and
+    // back, then send the visitor to log in with a return path to this page.
+    function stashPendingSaveAndGoToLogin() {
+        if (currentStory) {
+            try {
+                sessionStorage.setItem(PENDING_SAVE_KEY, JSON.stringify(currentStory));
+            } catch (error) {
+                console.error('Could not stash story for after login:', error);
+            }
+        }
+        window.location.href = '/auth/login?next=' + encodeURIComponent(window.location.pathname);
+    }
+
+    // Shown instead of the visibility dialog when Save is clicked signed out.
+    // The story itself is never lost — it's stashed and restored after login.
+    async function promptLoginToSave() {
+        if (!window.Swal) {
+            if (confirm("Log in to save your story? It'll be waiting for you right after you sign in.")) {
+                stashPendingSaveAndGoToLogin();
+            }
+            return;
+        }
+        const result = await Swal.fire({
+            title: 'Log in to save your story',
+            html:
+                '<div class="save-login-preview"><div class="save-login-blur"></div></div>' +
+                '<p>Sign in with Google to save it to your Library — nothing you made is lost, ' +
+                "it'll be waiting for you right after you log in.</p>",
+            showCancelButton: true,
+            confirmButtonText: 'Log in with Google',
+            cancelButtonText: 'Not now',
+            confirmButtonColor: '#8B5CF6',
+            background: '#171130',
+            color: '#EDEAF7',
+        });
+        if (result.isConfirmed) stashPendingSaveAndGoToLogin();
+    }
+
     document.getElementById('saveButton').addEventListener('click', async function() {
         if (!currentStory) return;
         const saveButton = this;
 
+        // Refresh sign-in state at click time (it may have changed since
+        // load) and gate the whole save flow on it — logged out never
+        // reaches the API, it goes to the log-in prompt instead.
+        try {
+            const meResp = await fetch('/api/me');
+            isLoggedIn = !!(await meResp.json()).user;
+        } catch (error) {
+            console.error('Could not check sign-in state:', error);
+        }
+        updateSaveButtonLockUI();
+        if (!isLoggedIn) {
+            promptLoginToSave();
+            return;
+        }
+
         let visibility = 'public';
         if (window.Swal) {
-            // Private is only offered when signed in — a private guest work
-            // would be orphaned, since nobody could ever prove ownership to
-            // retrieve it.
-            let loggedIn = false;
-            try {
-                const meResp = await fetch('/api/me');
-                loggedIn = !!(await meResp.json()).user;
-            } catch (error) {
-                console.error('Could not check sign-in state:', error);
-            }
-            const inputOptions = { public: '🌍 Everyone', unlisted: '🔗 Only people with the link' };
-            if (loggedIn) inputOptions.private = '🔒 Private (only you)';
             const choice = await Swal.fire({
                 title: 'Save to Library',
                 text: 'Who should see this story?',
                 input: 'radio',
-                inputOptions: inputOptions,
+                inputOptions: {
+                    public: '🌍 Everyone',
+                    unlisted: '🔗 Only people with the link',
+                    private: '🔒 Private (only you)',
+                },
                 inputValue: 'public',
                 showCancelButton: true,
                 confirmButtonText: 'Save',
@@ -637,5 +704,39 @@ document.getElementById('translation-toggle').addEventListener('click', function
     this.classList.toggle('active');
     console.log('Translation toggle:', this.classList.contains('active'));
 });
+
+// On load: check sign-in state, then — if a story was stashed before a
+// login round trip AND the visitor is now signed in — restore it onto the
+// page and reopen the save dialog automatically. Stays stashed if the
+// visitor is still logged out (nothing to restore into yet).
+(async function restorePendingSaveAfterLogin() {
+    try {
+        const resp = await fetch('/api/me');
+        isLoggedIn = !!(await resp.json()).user;
+    } catch (error) {
+        console.error('Could not load sign-in state:', error);
+    }
+    updateSaveButtonLockUI();
+
+    const stashed = sessionStorage.getItem(PENDING_SAVE_KEY);
+    if (!stashed || !isLoggedIn) return;
+
+    let restored = null;
+    try {
+        restored = JSON.parse(stashed);
+    } catch (error) {
+        console.error('Pending save was corrupt, discarding it:', error);
+    }
+    sessionStorage.removeItem(PENDING_SAVE_KEY);
+    if (!restored || !restored.story) return;
+
+    currentStory = restored;
+    currentNarration = restored.narration || null;
+    displayStory(restored.story, restored.imageUrl, restored.title || 'Generated Story');
+    buttonContainer.style.display = 'flex';
+    document.getElementById('saveButton').disabled = false;
+    updateSaveButtonLockUI();
+    document.getElementById('saveButton').click();
+})();
 
 });

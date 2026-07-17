@@ -160,11 +160,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
         let visibility = 'public';
         if (window.Swal) {
+            // Private is only offered when signed in — a private guest work
+            // would be orphaned, since nobody could ever prove ownership to
+            // retrieve it.
+            let loggedIn = false;
+            try {
+                const meResp = await fetch('/api/me');
+                loggedIn = !!(await meResp.json()).user;
+            } catch (error) {
+                console.error('Could not check sign-in state:', error);
+            }
+            const inputOptions = { public: '🌍 Everyone', unlisted: '🔗 Only people with the link' };
+            if (loggedIn) inputOptions.private = '🔒 Private (only you)';
             const choice = await Swal.fire({
                 title: 'Save to Library',
                 text: 'Who should see this story?',
                 input: 'radio',
-                inputOptions: { public: '🌍 Everyone', unlisted: '🔗 Only people with the link' },
+                inputOptions: inputOptions,
                 inputValue: 'public',
                 showCancelButton: true,
                 confirmButtonText: 'Save',
@@ -201,7 +213,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 'Saved to Library',
                 visibility === 'public'
                     ? 'Your story is now in the Library for everyone to read.'
-                    : 'Saved! Only people with the link can view it (share pages coming soon).'
+                    : visibility === 'private'
+                        ? 'Saved! Only you can view it.'
+                        : 'Saved! Only people with the link can view it (share pages coming soon).'
             );
         } catch (error) {
             console.error('Error saving story:', error);

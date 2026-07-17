@@ -349,15 +349,15 @@ async function handleGenerateStory(env, anthropic, body) {
 
 // GET /api/works?kind=&genre=&owner=&emotion=&character=
 // Library listing with every filter from the schema's feature->query map.
-async function handleListWorks(env, url) {
+async function handleListWorks(env, url, sessionUser) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
 
     const p = url.searchParams;
-    // Listings only ever show public works. Once auth ships this becomes
-    // (visibility = 'public' OR owner_id = :viewer); 'unlisted' works are
-    // reachable by direct id but never listed; 'private' never leaves the DB.
-    const where = ["w.visibility = 'public'"];
-    const binds = [];
+    // Listings show public works, plus the viewer's own (any visibility) when
+    // signed in; 'unlisted' works are otherwise reachable by direct id but
+    // never listed; 'private' never leaves the DB except to its owner.
+    const where = sessionUser ? ["(w.visibility = 'public' OR w.owner_id = ?)"] : ["w.visibility = 'public'"];
+    const binds = sessionUser ? [sessionUser.id] : [];
 
     if (p.get('kind'))  { where.push('w.kind = ?');     binds.push(p.get('kind')); }
     if (p.get('genre')) { where.push('w.genre = ?');    binds.push(p.get('genre')); }
@@ -375,7 +375,7 @@ async function handleListWorks(env, url) {
 
     const sql = `
         SELECT w.id, w.kind, w.title, w.genre, w.language, w.length, w.owner_id,
-               w.cover_image_url, w.created_at,
+               w.visibility, w.cover_image_url, w.created_at,
                (SELECT s.display_text FROM scenes s
                 WHERE s.work_id = w.id ORDER BY s.idx LIMIT 1) AS excerpt,
                (SELECT GROUP_CONCAT(we.emotion) FROM work_emotions we
@@ -392,15 +392,17 @@ async function handleListWorks(env, url) {
 }
 
 // GET /api/works/:id — full work: scenes (with lines), cast, emotions.
-async function handleGetWork(env, id) {
+async function handleGetWork(env, id, sessionUser) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
 
-    // Direct fetch serves public AND unlisted (share links); private works are
-    // indistinguishable from missing ones until auth can prove ownership.
-    const work = await env.DB.prepare(
-        "SELECT * FROM works WHERE id = ? AND visibility IN ('public','unlisted')"
-    ).bind(id).first();
+    // Fetched without a visibility filter so ownership can be checked below;
+    // direct fetch serves public AND unlisted (share links). A private work
+    // is served only to its owner — anyone else gets the same 404 as a
+    // missing work, so its existence is never revealed.
+    const work = await env.DB.prepare('SELECT * FROM works WHERE id = ?').bind(id).first();
     if (!work) return json({ error: 'Work not found' }, 404);
+    const ownedByViewer = sessionUser && sessionUser.id === work.owner_id;
+    if (work.visibility === 'private' && !ownedByViewer) return json({ error: 'Work not found' }, 404);
 
     const [scenes, lines, cast, emotions] = await Promise.all([
         env.DB.prepare('SELECT * FROM scenes WHERE work_id = ? ORDER BY idx').bind(id).all(),
@@ -618,11 +620,16 @@ async function handleMedia(env, path) {
 }
 
 // POST /api/works — persist a generated story into the library.
-// Pre-auth, works are owned by the 'guest' system user; the client offers
-// 'public' or 'unlisted'. 'private' arrives with accounts (a private guest
-// work would be orphaned — nobody could ever retrieve it).
-async function handleCreateWork(env, body) {
+// Signed-in saves are owned by that user and may be 'private'. Logged-out
+// saves are owned by the 'guest' system user and stay 'public' or 'unlisted'
+// — a private guest work would be orphaned, since nobody could ever prove
+// ownership to retrieve it.
+async function handleCreateWork(env, request, body) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
+
+    const sessionUser = await getSessionUser(env, request);
+    const ownerId = sessionUser ? sessionUser.id : 'guest';
+    const allowedVisibility = sessionUser ? ['private', 'unlisted', 'public'] : ['public', 'unlisted'];
 
     const {
         kind = 'story',
@@ -638,8 +645,12 @@ async function handleCreateWork(env, body) {
 
     if (kind !== 'story') return json({ error: "Only kind 'story' can be saved for now" }, 400);
     if (typeof title !== 'string' || !title.trim()) return json({ error: 'A title is required' }, 400);
-    if (!['public', 'unlisted'].includes(visibility)) {
-        return json({ error: "visibility must be 'public' or 'unlisted' (private works arrive with accounts)" }, 400);
+    if (!allowedVisibility.includes(visibility)) {
+        return json({
+            error: sessionUser
+                ? "visibility must be 'private', 'unlisted', or 'public'"
+                : "visibility must be 'public' or 'unlisted' (visibility 'private' requires being logged in)",
+        }, 400);
     }
     if (!Array.isArray(scenes) || scenes.length === 0) return json({ error: 'At least one scene is required' }, 400);
     if (scenes.length > 50) return json({ error: 'Too many scenes (max 50)' }, 400);
@@ -681,9 +692,10 @@ async function handleCreateWork(env, body) {
     const statements = [
         env.DB.prepare(
             `INSERT INTO works (id, owner_id, kind, title, genre, language, length, source, visibility, cover_image_url, created_at)
-             VALUES (?, 'guest', 'story', ?, ?, ?, ?, 'user', ?, ?, ?)`
+             VALUES (?, ?, 'story', ?, ?, ?, ?, 'user', ?, ?, ?)`
         ).bind(
             workId,
+            ownerId,
             title.trim().slice(0, 200),
             genre ? String(genre).trim().slice(0, 40).toLowerCase() : null,
             String(language).slice(0, 10),
@@ -734,15 +746,19 @@ export default {
                     return await handleSpeech(env, body);
                 }
                 if (path === '/generate-story') return await handleGenerateStory(env, anthropic, body);
-                if (path === '/api/works') return await handleCreateWork(env, body);
+                if (path === '/api/works') return await handleCreateWork(env, request, body);
                 if (path === '/auth/logout') return await handleAuthLogout(env, request);
             }
 
             if (method === 'GET') {
                 if (path.startsWith('/media/')) return await handleMedia(env, path);
-                if (path === '/api/works') return await handleListWorks(env, url);
+                if (path === '/api/works') return await handleListWorks(env, url, await getSessionUser(env, request));
                 if (path.startsWith('/api/works/')) {
-                    return await handleGetWork(env, decodeURIComponent(path.slice('/api/works/'.length)));
+                    return await handleGetWork(
+                        env,
+                        decodeURIComponent(path.slice('/api/works/'.length)),
+                        await getSessionUser(env, request)
+                    );
                 }
                 if (path.startsWith('/definition/')) {
                     const word = decodeURIComponent(path.slice('/definition/'.length));

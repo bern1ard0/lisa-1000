@@ -348,18 +348,21 @@ header { background: transparent; }
 .star-field .star.gold i { color: var(--amber); }
 
 /* On smaller screens keep two covers, faded behind the hero text */
+/* On smaller screens the covers never disappear — they all slip behind the
+   hero text with a much heavier fade, spread along the edges. */
 @media (max-width: 1240px) {
-    .hero-float.bottom-left, .hero-float.bottom-right,
-    .hero-float.mid-left, .hero-float.mid-right { display: none; }
-
-    .hero-float.left, .hero-float.right {
+    .hero-float {
         z-index: 0;
-        opacity: 0.3;
-        width: 150px;
+        opacity: 0.14;
+        width: 120px;
     }
 
-    .hero-float.left { left: -30px; top: 12%; }
-    .hero-float.right { right: -30px; top: 55%; }
+    .hero-float.left  { left: -30px; top: 10%; opacity: 0.3; width: 150px; }
+    .hero-float.right { right: -30px; top: 55%; opacity: 0.3; width: 150px; }
+    .hero-float.mid-left     { left: -40px; top: 38%; opacity: 0.14; }
+    .hero-float.mid-right    { right: -40px; top: 80%; opacity: 0.14; }
+    .hero-float.bottom-left  { left: 22%; top: 82%; }
+    .hero-float.bottom-right { right: 55%; top: 3%; left: auto; }
 }
 
 /* ---------- Page header (Library / Create Story) ---------- */

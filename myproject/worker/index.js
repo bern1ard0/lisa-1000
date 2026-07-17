@@ -182,6 +182,12 @@ function elevenModelFor(text) {
     return /\[[^\]\n]{2,30}\]/.test(text) ? 'eleven_v3' : 'eleven_multilingual_v2';
 }
 
+// Strip [cue] delivery markers — used for the OpenAI fallback (which would
+// read them out loud) and for the narration-with-timestamps v3 → v2 retry.
+function stripCues(text) {
+    return text.replace(/\[[^\]\n]{2,30}\]\s*/g, '');
+}
+
 async function handleSpeech(env, body) {
     const { text, voice } = body;
     if (!text) return json({ error: 'No text provided' }, 400);
@@ -212,7 +218,7 @@ async function handleSpeech(env, body) {
 
     // Fallback: OpenAI TTS. Strip emotional cues (OpenAI would read them out)
     // and map named/ElevenLabs voices onto the closest OpenAI equivalents.
-    const plain = text.replace(/\[[^\]\n]{2,30}\]\s*/g, '');
+    const plain = stripCues(text);
     const openaiVoice = /^(alloy|echo|fable|onyx|nova|shimmer)$/.test(voice || '')
         ? voice
         : (['adam', ELEVEN_VOICES.adam].includes(voice) ? 'onyx' : 'nova');
@@ -233,6 +239,140 @@ async function handleSpeech(env, body) {
     return new Response(resp.body, {
         status: 200,
         headers: { 'Content-Type': 'audio/mpeg' },
+    });
+}
+
+// ---------- Narration cache (synthesize once, replay free) ----------
+
+// ElevenLabs "with-timestamps": same synthesis as /stream, but returns whole
+// base64 audio plus per-character alignment instead of a byte stream — the
+// alignment is what makes word highlighting possible on replay.
+async function synthesizeWithTimestamps(env, voiceId, text, modelId) {
+    const resp = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps?output_format=mp3_44100_128`,
+        {
+            method: 'POST',
+            headers: {
+                'xi-api-key': env.ELEVENLABS_API_KEY,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text, model_id: modelId }),
+        }
+    );
+    if (!resp.ok) throw new Error(`ElevenLabs with-timestamps failed (${resp.status}): ${await resp.text()}`);
+    const data = await resp.json();
+    if (!data.audio_base64 || !data.alignment) throw new Error('ElevenLabs with-timestamps returned no audio/alignment');
+    return { audioBase64: data.audio_base64, alignment: data.alignment };
+}
+
+// Collapse ElevenLabs' per-character alignment into per-word timings, e.g.
+// { characters: ['H','i',' ','w','o','r','l','d'], character_start_times_seconds: [...], ... }
+// becomes { words: [{ w: 'Hi', s: 0, e: 0.2 }, { w: 'world', s: 0.3, e: 0.7 }] }.
+// [cue] runs are dropped entirely — they're never spoken as words, and a
+// scene's rough start time can later be derived by matching its first word
+// against this list (no separate scene-sync data needed).
+function compactWordTimestamps(alignment) {
+    const chars = alignment?.characters || [];
+    const starts = alignment?.character_start_times_seconds || [];
+    const ends = alignment?.character_end_times_seconds || [];
+    const words = [];
+    let word = '', wordStart = null, wordEnd = null, inCue = false;
+
+    const flush = () => {
+        if (word) words.push({ w: word, s: wordStart, e: wordEnd });
+        word = '';
+        wordStart = null;
+        wordEnd = null;
+    };
+
+    for (let i = 0; i < chars.length; i++) {
+        const ch = chars[i];
+        if (ch === '[') { flush(); inCue = true; continue; }
+        if (ch === ']') { inCue = false; continue; }
+        if (inCue) continue;
+        if (/\s/.test(ch)) { flush(); continue; }
+        if (!word) wordStart = starts[i];
+        word += ch;
+        wordEnd = ends[i];
+    }
+    flush();
+    return words;
+}
+
+// GET /api/works/:id/narration?voice=<key-or-id> — cached narration audio +
+// word timestamps. Same visibility rule as handleGetWork (private works are
+// invisible to non-owners). A cache hit is free; a miss synthesizes once via
+// ElevenLabs and stores the result so every later play/replay is a hit.
+async function handleGetNarration(env, workId, voiceParam, sessionUser) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+    if (!env.MEDIA) return json({ error: 'Media storage not configured' }, 501); // cache requires R2
+
+    const work = await env.DB.prepare('SELECT * FROM works WHERE id = ?').bind(workId).first();
+    if (!work) return json({ error: 'Work not found' }, 404);
+    const ownedByViewer = sessionUser && sessionUser.id === work.owner_id;
+    if (work.visibility === 'private' && !ownedByViewer) return json({ error: 'Work not found' }, 404);
+
+    const voiceId = resolveElevenVoiceId(voiceParam);
+    const language = work.language || 'en';
+
+    const cached = await env.DB.prepare(
+        'SELECT audio_url, timestamps_json FROM narrations WHERE work_id = ? AND voice_id = ? AND language = ?'
+    ).bind(workId, voiceId, language).first();
+    if (cached) {
+        return json({
+            audio_url: cached.audio_url,
+            timestamps: cached.timestamps_json ? JSON.parse(cached.timestamps_json) : null,
+            cached: true,
+        });
+    }
+
+    if (!env.ELEVENLABS_API_KEY) return json({ error: 'Narration not available' }, 502);
+
+    const scenes = await env.DB.prepare(
+        'SELECT narration_text, display_text FROM scenes WHERE work_id = ? ORDER BY idx'
+    ).bind(workId).all();
+    if (!scenes.results.length) return json({ error: 'Work has no scenes' }, 404);
+    const text = scenes.results.map((s) => s.narration_text || s.display_text).join('\n\n');
+
+    let audioBase64, alignment;
+    try {
+        ({ audioBase64, alignment } = await synthesizeWithTimestamps(env, voiceId, text, elevenModelFor(text)));
+    } catch (error) {
+        // v3 (cue-driven) synthesis is less reliable than v2 — one retry with
+        // cues stripped before giving up and letting the client fall back to
+        // live streaming.
+        if (elevenModelFor(text) !== 'eleven_v3') {
+            console.error('Narration synthesis failed:', error.message);
+            return json({ error: 'Narration synthesis failed', detail: error.message }, 502);
+        }
+        try {
+            ({ audioBase64, alignment } = await synthesizeWithTimestamps(env, voiceId, stripCues(text), 'eleven_multilingual_v2'));
+        } catch (retryError) {
+            console.error('Narration synthesis retry failed:', retryError.message);
+            return json({ error: 'Narration synthesis failed', detail: retryError.message }, 502);
+        }
+    }
+
+    const audioBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
+    const key = `narrations/${workId}/${voiceId}/${language}.mp3`;
+    await env.MEDIA.put(key, audioBytes, { httpMetadata: { contentType: 'audio/mpeg' } });
+    const audioUrl = `/media/${key}`;
+    const timestampsJson = JSON.stringify({ words: compactWordTimestamps(alignment) });
+
+    // The unique index may race under concurrent requests for the same
+    // (work, voice, language); IGNORE the loser and re-read whichever row won.
+    await env.DB.prepare(
+        `INSERT OR IGNORE INTO narrations (id, work_id, voice_id, language, audio_url, timestamps_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).bind(`n_${crypto.randomUUID()}`, workId, voiceId, language, audioUrl, timestampsJson, Math.floor(Date.now() / 1000)).run();
+
+    const row = await env.DB.prepare(
+        'SELECT audio_url, timestamps_json FROM narrations WHERE work_id = ? AND voice_id = ? AND language = ?'
+    ).bind(workId, voiceId, language).first();
+    return json({
+        audio_url: row.audio_url,
+        timestamps: row.timestamps_json ? JSON.parse(row.timestamps_json) : null,
+        cached: false,
     });
 }
 
@@ -796,6 +936,10 @@ export default {
             if (method === 'GET') {
                 if (path.startsWith('/media/')) return await handleMedia(env, path);
                 if (path === '/api/works') return await handleListWorks(env, url, await getSessionUser(env, request));
+                if (path.startsWith('/api/works/') && path.endsWith('/narration')) {
+                    const id = decodeURIComponent(path.slice('/api/works/'.length, -'/narration'.length));
+                    return await handleGetNarration(env, id, url.searchParams.get('voice'), await getSessionUser(env, request));
+                }
                 if (path.startsWith('/api/works/')) {
                     return await handleGetWork(
                         env,

@@ -665,6 +665,14 @@ main {
     border-radius: 6px;
 }
 
+/* Current word during cached-narration playback (see storyPage.js). */
+#story-content .word-active {
+    color: #fff;
+    background: rgba(139, 92, 246, 0.3);
+    border-radius: 4px;
+    transition: background-color 0.1s ease, color 0.1s ease;
+}
+
 .reader-hint {
     margin: 0;
     padding: 0 30px 18px;

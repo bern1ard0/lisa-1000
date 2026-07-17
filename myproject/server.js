@@ -305,7 +305,7 @@ app.get('/definition/:word', async (req, res) => {
 });
 
 
-// Endpoint for generating a story (Claude) and an illustration (Higgsfield Soul)
+// Endpoint for generating a story and an illustration
 app.post('/generate-story', async (req, res) => {
     const prompt = req.body.prompt;
     if (!prompt) {

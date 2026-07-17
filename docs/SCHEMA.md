@@ -50,6 +50,26 @@ CREATE TABLE users (
 -- Reserved row: ('lisa', 'lisa', NULL, ...)
 ```
 
+Reserved rows: `lisa` owns built-in content (above); `guest` (migration 0004)
+owns everything created before sign-in — every pre-auth save lands on that
+one row, no anonymous-session tracking needed. Sign-in is Google OAuth only
+(migration 0005) — no passwords are ever stored.
+
+### sessions
+A login session. The cookie the browser holds is a raw random token; only
+its SHA-256 is stored here, so a leaked database can't be used to forge a
+session — an attacker would still need the original 32 random bytes.
+
+```sql
+CREATE TABLE sessions (
+  token_hash  TEXT PRIMARY KEY,           -- SHA-256 hex of the cookie token
+  user_id     TEXT NOT NULL REFERENCES users(id),
+  created_at  INTEGER NOT NULL,
+  expires_at  INTEGER NOT NULL            -- unix epoch seconds; 30 days out
+);
+CREATE INDEX idx_sessions_user ON sessions(user_id);
+```
+
 ### voices
 One table covers three concepts: the voice catalogue, ownership
 (the old `Voice_Bank`), and the per-language bank.

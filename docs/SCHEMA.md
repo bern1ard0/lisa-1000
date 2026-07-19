@@ -390,6 +390,13 @@ For `kind: "story"`, `characters` may be empty and `lines` may be omitted —
 - Play audio mixing: stitch per-line clips server-side into one `narrations`
   file, or play sequential clips client-side? (Server-side stitch is simpler
   for replay + export; start there.)
-- Do generated illustrations belong per-scene from day one (they do for
+- ~~Do generated illustrations belong per-scene from day one (they do for
   animation), and is gpt-image-2 or Higgsfield Soul the default per-scene
-  engine given character reference support?
+  engine given character reference support?~~ **Resolved**: yes, per-scene
+  from day one. Engine is Nano Banana 2 (primary) → Seedream 4.x via fal.ai
+  (fallback) for character-consistent scene art; gpt-image-2 falls back
+  further, to conversational-only editing. Higgsfield Soul is rejected for
+  this role — it's a photoreal/real-person identity engine, wrong tool for
+  invented illustrated characters — but remains a fallback for single-image
+  covers, where consistency across scenes doesn't matter. See
+  `docs/MODELS.md` §2.

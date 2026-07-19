@@ -6,9 +6,12 @@
 //   ANTHROPIC_API_KEY    Claude (stories, definitions, translation)
 //   ELEVENLABS_API_KEY   text-to-speech (streaming narration)
 //   OPENAI_API_KEY       images + TTS fallback when ElevenLabs is unavailable
-//   HF_CREDENTIALS       Higgsfield "KEY_ID:KEY_SECRET" (story illustrations)
+//   HF_CREDENTIALS       Higgsfield "KEY_ID:KEY_SECRET" (cover-art fallback)
 //   GOOGLE_CLIENT_ID     Google OAuth sign-in (/auth/login, /auth/callback)
 //   GOOGLE_CLIENT_SECRET Google OAuth sign-in — paired with GOOGLE_CLIENT_ID
+//   FAL_KEY              planned — see docs/MODELS.md (Seedream/Kling/Wan scene art + animation)
+//   GEMINI_API_KEY       planned — see docs/MODELS.md (Nano Banana 2 scene art)
+//   MINIMAX_API_KEY      planned — see docs/MODELS.md (Speech 2.6 HD TTS fallback)
 
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -63,6 +66,27 @@ async function lookupDictionary(word) {
     return { word: entry.word, phonetic, audioUrl, meanings };
 }
 
+// ---------- Generic provider-fallback chain ----------
+// Shared by every "try provider A, then B, then C" spot in this file (text,
+// covers; see docs/MODELS.md for the full orchestration table). `providers`
+// is tried in order: skip any whose `available()` is false, run the rest,
+// log-and-continue on failure. If every provider is skipped or fails, throw
+// the last error (or a "no provider configured" error if none ran at all).
+// No per-provider timeout here — fetch() already has its own.
+async function withFallback(label, providers) {
+    let lastError = null;
+    for (const { name, available, run } of providers) {
+        if (!available()) continue;
+        try {
+            return await run();
+        } catch (error) {
+            lastError = error;
+            console.error(`${label}: ${name} failed, trying next:`, error.message);
+        }
+    }
+    throw lastError || new Error(`${label}: no provider configured`);
+}
+
 // ---------- OpenAI primary with a Claude fallback ----------
 // OpenAI (gpt-5-mini) serves all text generation; if it fails — for any
 // reason — the same prompt runs against Claude instead. Two independent
@@ -103,20 +127,21 @@ async function claudeChatText(anthropic, system, prompt, maxTokens) {
 }
 
 // OpenAI first; on any OpenAI failure run the same prompt against Claude.
-// With no OpenAI key configured at all, Claude serves alone.
+// With no OpenAI key configured at all, Claude serves alone (skipped, not
+// attempted — withFallback only logs providers it actually tried and failed).
 async function generateText(env, anthropic, { system, prompt, maxTokens }) {
-    if (!env.OPENAI_API_KEY) {
-        return { text: await claudeChatText(anthropic, system, prompt, maxTokens), provider: 'claude' };
-    }
-    try {
-        return { text: await openaiChatText(env, system, prompt, maxTokens), provider: 'openai' };
-    } catch (error) {
-        if (!env.ANTHROPIC_API_KEY) throw error;
-        // Logged so a config problem (e.g. bad OpenAI key) stays visible in
-        // the worker logs even while Claude keeps the site alive.
-        console.error('OpenAI unavailable, falling back to Claude:', error.message);
-        return { text: await claudeChatText(anthropic, system, prompt, maxTokens), provider: 'claude' };
-    }
+    return withFallback('generateText', [
+        {
+            name: 'openai',
+            available: () => !!env.OPENAI_API_KEY,
+            run: async () => ({ text: await openaiChatText(env, system, prompt, maxTokens), provider: 'openai' }),
+        },
+        {
+            name: 'claude',
+            available: () => !!env.ANTHROPIC_API_KEY,
+            run: async () => ({ text: await claudeChatText(anthropic, system, prompt, maxTokens), provider: 'claude' }),
+        },
+    ]);
 }
 
 async function defineWithClaude(env, anthropic, word) {
@@ -192,8 +217,12 @@ async function handleSpeech(env, body) {
     const { text, voice } = body;
     if (!text) return json({ error: 'No text provided' }, 400);
 
-    // ElevenLabs first: the upstream body is passed through untouched, so the
-    // client starts playing while synthesis is still running.
+    // Streaming responses can't be retried after partial delivery, so this
+    // doesn't call withFallback — but it implements the same chain contract
+    // by hand: ElevenLabs → OpenAI, skip if unconfigured, log and fall
+    // through on failure. ElevenLabs first: the upstream body is passed
+    // through untouched, so the client starts playing while synthesis is
+    // still running.
     if (env.ELEVENLABS_API_KEY) {
         const voiceId = resolveElevenVoiceId(voice);
         const resp = await fetch(
@@ -481,7 +510,23 @@ async function handleGenerateStory(env, anthropic, body) {
 
     const { title, story, narration, imagePrompt } = parseStoryParts(text);
 
-    const imageUrl = await generateIllustrationOpenAI(env, (imagePrompt || story).substring(0, 1000));
+    // Cover art: GPT Image 2 primary, Higgsfield Soul fallback. Soul is a
+    // photoreal identity engine (wrong tool for multi-scene illustrated
+    // character consistency — see docs/MODELS.md §2) but a fine fallback
+    // for a single one-off cover image.
+    const coverPrompt = (imagePrompt || story).substring(0, 1000);
+    const imageUrl = await withFallback('cover image', [
+        {
+            name: 'gpt-image-2',
+            available: () => !!env.OPENAI_API_KEY,
+            run: () => generateIllustrationOpenAI(env, coverPrompt),
+        },
+        {
+            name: 'higgsfield-soul',
+            available: () => !!env.HF_CREDENTIALS,
+            run: () => generateIllustration(env, coverPrompt),
+        },
+    ]);
     return json({ title, story, narration, imageUrl });
 }
 

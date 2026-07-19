@@ -100,6 +100,16 @@ function buildAccountMenu(user) {
     return wrap;
 }
 
+// One shared /api/me fetch per page load — other scripts (cards, library,
+// My Stories) await window.lisaMePromise instead of refetching.
+window.lisaMePromise = fetch('/api/me')
+    .then((resp) => resp.json())
+    .then((data) => data.user || null)
+    .catch((error) => {
+        console.error('Could not load sign-in state:', error);
+        return null;
+    });
+
 // Sign-in widget for the header nav. Every page has an empty <li id="auth-nav">
 // slot; this fills it in from /api/me so signed-out visitors see "Log in"
 // and signed-in ones get an avatar + handle button that opens an account menu.
@@ -107,13 +117,22 @@ function buildAccountMenu(user) {
     const slot = document.getElementById('auth-nav');
     if (!slot) return;
 
-    let user = null;
-    try {
-        const resp = await fetch('/api/me');
-        ({ user } = await resp.json());
-    } catch (error) {
-        console.error('Could not load sign-in state:', error);
-        return;
+    const user = await window.lisaMePromise;
+
+    // Signed-in visitors get a "My Stories" tab, inserted after Create Story.
+    if (user && !document.querySelector('.nav-container nav a[href="mystories.html"]')) {
+        const createLink = document.querySelector('.nav-container nav a[href="create-story.html"]');
+        if (createLink) {
+            const li = document.createElement('li');
+            const link = document.createElement('a');
+            link.href = 'mystories.html';
+            link.textContent = 'My Stories';
+            if (window.location.pathname.split('/').pop() === 'mystories.html') {
+                link.classList.add('current-page');
+            }
+            li.appendChild(link);
+            createLink.parentElement.insertAdjacentElement('afterend', li);
+        }
     }
 
     slot.textContent = '';

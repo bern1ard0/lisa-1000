@@ -19,6 +19,24 @@ const OPENAI_TEXT_MODEL = 'gpt-5-mini';
 const CLAUDE_MODEL = 'claude-sonnet-5'; // swap to 'claude-haiku-4-5' (cheaper) or 'claude-opus-4-8' (higher quality)
 const HIGGSFIELD_BASE = 'https://platform.higgsfield.ai';
 
+// Style palette for generated illustrations. Every image prompt is wrapped
+// with one of these plus CARTOON_SUFFIX below, so covers stay unmistakably
+// storybook art — never photoreal — no matter which style the user picks.
+const CARTOON_STYLES = [
+    'storybook watercolor',
+    'flat vector cartoon',
+    'crayon and colored-pencil',
+    'paper cut-out collage',
+    'claymation-style 3D',
+    'soft pastel illustration',
+    'retro comic book',
+    "gouache children's picture book",
+];
+const DEFAULT_CARTOON_STYLE = 'storybook watercolor';
+// Hard suffix appended to every image prompt regardless of style, provider,
+// or user input — the one non-negotiable guardrail for a kids' product.
+const CARTOON_SUFFIX = ", charming children's cartoon illustration, absolutely no photorealism, no real people";
+
 function json(data, status = 200) {
     return new Response(JSON.stringify(data), {
         status,
@@ -396,6 +414,25 @@ async function generateIllustrationOpenAI(env, prompt) {
     return `data:image/png;base64,${b64}`;
 }
 
+// Poll a submitted Higgsfield job to completion. Shared by every
+// text2image model — submission bodies differ, polling doesn't.
+async function pollHiggsfieldJob(auth, job) {
+    const deadline = Date.now() + 120000;
+    while (!['completed', 'failed', 'nsfw'].includes(job.status)) {
+        if (Date.now() > deadline) throw new Error('Higgsfield polling timed out');
+        await new Promise((r) => setTimeout(r, 2000));
+        const poll = await fetch(`${HIGGSFIELD_BASE}/requests/${job.request_id}/status`, { headers: auth });
+        if (poll.status >= 500) continue; // transient server error, keep polling
+        if (!poll.ok) throw new Error(`Higgsfield poll failed (${poll.status})`);
+        job = await poll.json();
+    }
+
+    if (job.status !== 'completed' || !job.images?.length) {
+        throw new Error(`Higgsfield image generation ${job.status}`);
+    }
+    return job.images[0].url;
+}
+
 // Higgsfield Soul text-to-image via REST: submit, then poll to completion.
 // Kept for when HF_CREDENTIALS (platform.higgsfield.ai developer keys) are set up.
 async function generateIllustration(env, prompt) {
@@ -415,22 +452,64 @@ async function generateIllustration(env, prompt) {
     if (!submit.ok) {
         throw new Error(`Higgsfield submit failed (${submit.status}): ${await submit.text()}`);
     }
+    return pollHiggsfieldJob(auth, await submit.json());
+}
 
-    let job = await submit.json();
-    const deadline = Date.now() + 120000;
-    while (!['completed', 'failed', 'nsfw'].includes(job.status)) {
-        if (Date.now() > deadline) throw new Error('Higgsfield polling timed out');
-        await new Promise((r) => setTimeout(r, 2000));
-        const poll = await fetch(`${HIGGSFIELD_BASE}/requests/${job.request_id}/status`, { headers: auth });
-        if (poll.status >= 500) continue; // transient server error, keep polling
-        if (!poll.ok) throw new Error(`Higgsfield poll failed (${poll.status})`);
-        job = await poll.json();
-    }
+// Higgsfield Recraft V4.1 text-to-image — the model the user's own
+// Higgsfield account used to generate the original covers, at 16:9 1344x768.
+// NOTE: /v1/text2image/soul is confirmed (it's the working code above); the
+// analogous /v1/text2image/recraft path and body below follow the same
+// submit+poll contract by inference from the Soul route and the Higgsfield
+// SDK/CLI docs (which name the recraft_v4_1 model but don't publish its REST
+// path). Confirm the exact route/params against cloud.higgsfield.ai on the
+// first live call.
+async function generateIllustrationHiggsfield(env, prompt, opts = {}) {
+    const auth = { 'Authorization': `Key ${env.HF_CREDENTIALS}`, 'Content-Type': 'application/json' };
 
-    if (job.status !== 'completed' || !job.images?.length) {
-        throw new Error(`Higgsfield image generation ${job.status}`);
+    const submit = await fetch(`${HIGGSFIELD_BASE}/v1/text2image/recraft`, {
+        method: 'POST',
+        headers: auth,
+        body: JSON.stringify({
+            prompt,
+            model: 'recraft_v4_1',
+            width_and_height: opts.widthAndHeight || '1344x768',
+            batch_size: 1,
+        }),
+    });
+    if (!submit.ok) {
+        throw new Error(`Higgsfield recraft submit failed (${submit.status}): ${await submit.text()}`);
     }
-    return job.images[0].url;
+    return pollHiggsfieldJob(auth, await submit.json());
+}
+
+// Resolve the requested style: a literal CARTOON_STYLES entry, 'surprise'
+// for a random pick, or the default when omitted/unrecognized.
+function resolveCartoonStyle(requested) {
+    if (requested === 'surprise') {
+        return CARTOON_STYLES[Math.floor(Math.random() * CARTOON_STYLES.length)];
+    }
+    return CARTOON_STYLES.includes(requested) ? requested : DEFAULT_CARTOON_STYLE;
+}
+
+// Wrap a base image prompt with its style prefix and the hard suffix.
+// Applies identically no matter which provider ends up serving the request.
+function applyCartoonStyle(prompt, style) {
+    return `${style}, ${prompt}${CARTOON_SUFFIX}`;
+}
+
+// Cover chain: Higgsfield recraft_v4_1 first (when HF_CREDENTIALS is
+// configured — it's the model that made the original covers), OpenAI
+// gpt-image-2 otherwise or on any Higgsfield failure. Plain sequential
+// try/catch, same shape as the file's other provider fallbacks.
+async function generateCoverImage(env, styledPrompt) {
+    if (env.HF_CREDENTIALS) {
+        try {
+            return await generateIllustrationHiggsfield(env, styledPrompt);
+        } catch (error) {
+            console.error('Higgsfield cover generation failed, falling back to OpenAI:', error.message);
+        }
+    }
+    return await generateIllustrationOpenAI(env, styledPrompt);
 }
 
 const STORY_SYSTEM_PROMPT =
@@ -481,13 +560,42 @@ async function handleGenerateStory(env, anthropic, body) {
 
     const { title, story, narration, imagePrompt } = parseStoryParts(text);
 
-    const imageUrl = await generateIllustrationOpenAI(env, (imagePrompt || story).substring(0, 1000));
-    return json({ title, story, narration, imageUrl });
+    const styleUsed = resolveCartoonStyle(body.style);
+    const styledPrompt = applyCartoonStyle((imagePrompt || story).substring(0, 1000), styleUsed);
+    const imageUrl = await generateCoverImage(env, styledPrompt);
+    return json({ title, story, narration, imageUrl, styleUsed });
 }
 
 // ---------- Works API (D1 — schema in docs/SCHEMA.md) ----------
 
-// GET /api/works?kind=&genre=&owner=&emotion=&character=
+// Shared SELECT fragment for every listing-shaped work row (library, a
+// user's own works, recommendations): engagement counts, the owner's
+// handle, and — when signed in — the viewer's own reaction. IMPORTANT: the
+// `?` inside my_reaction's subselect is the FIRST placeholder in any query
+// built from this fragment (it sits in the SELECT clause, before any WHERE
+// binds), so callers must bind sessionUser.id first when sessionUser is set.
+function workListColumnsSql(sessionUser) {
+    return `w.id, w.kind, w.title, w.genre, w.language, w.length, w.owner_id,
+            w.visibility, w.cover_image_url, w.created_at, w.view_count,
+            (SELECT s.display_text FROM scenes s
+             WHERE s.work_id = w.id ORDER BY s.idx LIMIT 1) AS excerpt,
+            (SELECT GROUP_CONCAT(we.emotion) FROM work_emotions we
+             WHERE we.work_id = w.id) AS emotions,
+            (SELECT COUNT(*) FROM work_reactions wr WHERE wr.work_id = w.id AND wr.reaction = 'like') AS like_count,
+            (SELECT COUNT(*) FROM work_reactions wr WHERE wr.work_id = w.id AND wr.reaction = 'dislike') AS dislike_count,
+            u.handle AS owner_handle,
+            ${sessionUser
+                ? '(SELECT reaction FROM work_reactions wr WHERE wr.work_id = w.id AND wr.user_id = ?) AS my_reaction'
+                : 'NULL AS my_reaction'}`;
+}
+
+// Every row selected via workListColumnsSql() needs its comma-joined
+// emotions string exploded into an array.
+function mapWorkRow(r) {
+    return { ...r, emotions: r.emotions ? r.emotions.split(',') : [] };
+}
+
+// GET /api/works?kind=&genre=&owner=&emotion=&character=&q=
 // Library listing with every filter from the schema's feature->query map.
 async function handleListWorks(env, url, sessionUser) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
@@ -498,37 +606,243 @@ async function handleListWorks(env, url, sessionUser) {
     // never listed; 'private' never leaves the DB except to its owner.
     const where = sessionUser ? ["(w.visibility = 'public' OR w.owner_id = ?)"] : ["w.visibility = 'public'"];
     const binds = sessionUser ? [sessionUser.id] : [];
+    let hasFilter = false;
 
-    if (p.get('kind'))  { where.push('w.kind = ?');     binds.push(p.get('kind')); }
-    if (p.get('genre')) { where.push('w.genre = ?');    binds.push(p.get('genre')); }
-    if (p.get('owner')) { where.push('w.owner_id = ?'); binds.push(p.get('owner')); }
+    if (p.get('kind'))  { where.push('w.kind = ?');     binds.push(p.get('kind')); hasFilter = true; }
+    if (p.get('genre')) { where.push('w.genre = ?');    binds.push(p.get('genre')); hasFilter = true; }
+    if (p.get('owner')) { where.push('w.owner_id = ?'); binds.push(p.get('owner')); hasFilter = true; }
     if (p.get('emotion')) {
         where.push('EXISTS (SELECT 1 FROM work_emotions we WHERE we.work_id = w.id AND we.emotion = ?)');
         binds.push(p.get('emotion'));
+        hasFilter = true;
     }
     if (p.get('character')) {
         where.push(`EXISTS (SELECT 1 FROM work_characters wc
                             JOIN characters c ON c.id = wc.character_id
                             WHERE wc.work_id = w.id AND c.name = ? COLLATE NOCASE)`);
         binds.push(p.get('character'));
+        hasFilter = true;
+    }
+    const q = (p.get('q') || '').trim().slice(0, 100);
+    if (q) {
+        where.push('w.title LIKE ? COLLATE NOCASE');
+        binds.push(`%${q}%`);
+        hasFilter = true;
     }
 
+    // No filters/q: rank by likes then views so the JS pinning step below has
+    // a stable base order for "the rest". With filters/q: likes then recency
+    // — view_count would bias a narrow filtered result toward old favorites.
+    const orderSql = hasFilter
+        ? 'ORDER BY like_count DESC, w.created_at DESC, w.id'
+        : 'ORDER BY like_count DESC, w.view_count DESC, w.created_at DESC, w.id';
+
+    const selectBinds = sessionUser ? [sessionUser.id] : [];
     const sql = `
-        SELECT w.id, w.kind, w.title, w.genre, w.language, w.length, w.owner_id,
-               w.visibility, w.cover_image_url, w.created_at,
-               (SELECT s.display_text FROM scenes s
-                WHERE s.work_id = w.id ORDER BY s.idx LIMIT 1) AS excerpt,
-               (SELECT GROUP_CONCAT(we.emotion) FROM work_emotions we
-                WHERE we.work_id = w.id) AS emotions
+        SELECT ${workListColumnsSql(sessionUser)}
         FROM works w
+        JOIN users u ON u.id = w.owner_id
         ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-        ORDER BY w.created_at DESC, w.id
+        ${orderSql}
         LIMIT 100`;
 
-    const { results } = await env.DB.prepare(sql).bind(...binds).all();
-    return json({
-        works: results.map((r) => ({ ...r, emotions: r.emotions ? r.emotions.split(',') : [] })),
-    });
+    const { results } = await env.DB.prepare(sql).bind(...selectBinds, ...binds).all();
+
+    // A real search is a strong "interested in" signal for recommendations.
+    if (sessionUser && q) {
+        await env.DB.prepare(
+            `INSERT INTO user_events (id, user_id, kind, work_id, query, created_at) VALUES (?, ?, 'search', NULL, ?, ?)`
+        ).bind(`ue_${crypto.randomUUID()}`, sessionUser.id, q, Math.floor(Date.now() / 1000)).run();
+    }
+
+    let works = results.map(mapWorkRow);
+
+    // Plain listing only: pin the top 3 by view_count (ties by like_count) to
+    // the front, then leave the rest in the like/view/recency order already
+    // computed by the query above — one query, a stable JS partition on top.
+    if (!hasFilter) {
+        const byViews = [...works].sort((a, b) => b.view_count - a.view_count || b.like_count - a.like_count);
+        const pinnedIds = new Set(byViews.slice(0, 3).map((w) => w.id));
+        const pinned = byViews.filter((w) => pinnedIds.has(w.id));
+        const rest = works.filter((w) => !pinnedIds.has(w.id));
+        works = [...pinned, ...rest];
+    }
+
+    return json({ works });
+}
+
+// POST /api/works/:id/view — bumps view_count. No login required; visible to
+// anyone who can see the work (same rule as handleGetWork). Logs an 'open'
+// signal event when the viewer is signed in.
+async function handleTrackView(env, id, sessionUser) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+
+    const work = await env.DB.prepare('SELECT owner_id, visibility FROM works WHERE id = ?').bind(id).first();
+    if (!work) return json({ error: 'Work not found' }, 404);
+    const ownedByViewer = sessionUser && sessionUser.id === work.owner_id;
+    if (work.visibility === 'private' && !ownedByViewer) return json({ error: 'Work not found' }, 404);
+
+    await env.DB.prepare('UPDATE works SET view_count = view_count + 1 WHERE id = ?').bind(id).run();
+    if (sessionUser) {
+        await env.DB.prepare(
+            `INSERT INTO user_events (id, user_id, kind, work_id, query, created_at) VALUES (?, ?, 'open', ?, NULL, ?)`
+        ).bind(`ue_${crypto.randomUUID()}`, sessionUser.id, id, Math.floor(Date.now() / 1000)).run();
+    }
+
+    const row = await env.DB.prepare('SELECT view_count FROM works WHERE id = ?').bind(id).first();
+    return json({ view_count: row.view_count });
+}
+
+// POST /api/works/:id/reaction  { reaction: 'like' | 'dislike' | null }
+// One reaction per (work, user); sending a new value replaces the old one,
+// null clears it. Requires sign-in — an anonymous "like" can't be undone by
+// its author later. Same visibility rule as viewing: you can't react to a
+// private work that isn't yours.
+async function handleReaction(env, id, sessionUser, body) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+    if (!sessionUser) return json({ error: 'Log in to react' }, 401);
+
+    const work = await env.DB.prepare('SELECT owner_id, visibility FROM works WHERE id = ?').bind(id).first();
+    if (!work) return json({ error: 'Work not found' }, 404);
+    const ownedByViewer = sessionUser.id === work.owner_id;
+    if (work.visibility === 'private' && !ownedByViewer) return json({ error: 'Work not found' }, 404);
+
+    const reaction = body?.reaction ?? null;
+    if (reaction !== null && reaction !== 'like' && reaction !== 'dislike') {
+        return json({ error: "reaction must be 'like', 'dislike', or null" }, 400);
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    if (reaction === null) {
+        await env.DB.prepare('DELETE FROM work_reactions WHERE work_id = ? AND user_id = ?').bind(id, sessionUser.id).run();
+    } else {
+        // Flipping like<->dislike replaces the row (PRIMARY KEY (work_id, user_id)).
+        await env.DB.prepare(
+            'INSERT OR REPLACE INTO work_reactions (work_id, user_id, reaction, created_at) VALUES (?, ?, ?, ?)'
+        ).bind(id, sessionUser.id, reaction, now).run();
+        if (reaction === 'like') {
+            await env.DB.prepare(
+                `INSERT INTO user_events (id, user_id, kind, work_id, query, created_at) VALUES (?, ?, 'like', ?, NULL, ?)`
+            ).bind(`ue_${crypto.randomUUID()}`, sessionUser.id, id, now).run();
+        }
+    }
+
+    const counts = await env.DB.prepare(
+        `SELECT
+            (SELECT COUNT(*) FROM work_reactions WHERE work_id = ? AND reaction = 'like') AS like_count,
+            (SELECT COUNT(*) FROM work_reactions WHERE work_id = ? AND reaction = 'dislike') AS dislike_count`
+    ).bind(id, id).first();
+    const mine = await env.DB.prepare(
+        'SELECT reaction FROM work_reactions WHERE work_id = ? AND user_id = ?'
+    ).bind(id, sessionUser.id).first();
+
+    return json({ like_count: counts.like_count, dislike_count: counts.dislike_count, my_reaction: mine?.reaction ?? null });
+}
+
+// PATCH /api/works/:id  { visibility }  — owner-only.
+async function handleUpdateWork(env, id, sessionUser, body) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+
+    const work = await env.DB.prepare('SELECT owner_id FROM works WHERE id = ?').bind(id).first();
+    if (!work) return json({ error: 'Work not found' }, 404);
+    if (!sessionUser || sessionUser.id !== work.owner_id) return json({ error: 'Not your work' }, 403);
+
+    const visibility = body?.visibility;
+    const allowedVisibility = ['private', 'unlisted', 'public'];
+    if (!allowedVisibility.includes(visibility)) {
+        return json({ error: "visibility must be 'private', 'unlisted', or 'public'" }, 400);
+    }
+
+    await env.DB.prepare('UPDATE works SET visibility = ? WHERE id = ?').bind(visibility, id).run();
+    return json({ id, visibility });
+}
+
+// DELETE /api/works/:id — owner-only. Children (scenes, work_emotions,
+// work_characters, narrations, animations) cascade via ON DELETE CASCADE.
+async function handleDeleteWork(env, id, sessionUser) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+
+    const work = await env.DB.prepare('SELECT owner_id FROM works WHERE id = ?').bind(id).first();
+    if (!work) return json({ error: 'Work not found' }, 404);
+    if (!sessionUser || sessionUser.id !== work.owner_id) return json({ error: 'Not your work' }, 403);
+
+    await env.DB.prepare('DELETE FROM works WHERE id = ?').bind(id).run();
+    return json({ ok: true });
+}
+
+// GET /api/me/works — every work the signed-in user owns, any visibility.
+// Feeds the MyStories page.
+async function handleMyWorks(env, sessionUser) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+    if (!sessionUser) return json({ error: 'Not signed in' }, 401);
+
+    const sql = `
+        SELECT ${workListColumnsSql(sessionUser)}
+        FROM works w
+        JOIN users u ON u.id = w.owner_id
+        WHERE w.owner_id = ?
+        ORDER BY w.created_at DESC, w.id
+        LIMIT 200`;
+
+    const { results } = await env.DB.prepare(sql).bind(sessionUser.id, sessionUser.id).all();
+    return json({ works: results.map(mapWorkRow) });
+}
+
+// GET /api/me/recommendations — basic content-based "recommended for you".
+// Signal: the genres/emotions of works this user has opened or liked (last
+// 200 matching events). Candidates: public works they don't own and haven't
+// opened, ranked by genre/emotion overlap with their signal, then by
+// like_count. No signal at all → the 6 most-liked public works they don't
+// own (the query below is already sorted that way).
+async function handleRecommendations(env, sessionUser) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+    if (!sessionUser) return json({ error: 'Not signed in' }, 401);
+
+    const events = await env.DB.prepare(
+        `SELECT ue.kind, ue.work_id, w.genre,
+                (SELECT GROUP_CONCAT(we.emotion) FROM work_emotions we WHERE we.work_id = w.id) AS emotions
+         FROM user_events ue
+         JOIN works w ON w.id = ue.work_id
+         WHERE ue.user_id = ? AND ue.kind IN ('open','like')
+         ORDER BY ue.created_at DESC
+         LIMIT 200`
+    ).bind(sessionUser.id).all();
+
+    const openedIds = new Set();
+    const genreCounts = {};
+    const emotionCounts = {};
+    for (const e of events.results) {
+        if (e.kind === 'open') openedIds.add(e.work_id);
+        if (e.genre) genreCounts[e.genre] = (genreCounts[e.genre] || 0) + 1;
+        for (const emotion of e.emotions ? e.emotions.split(',') : []) {
+            emotionCounts[emotion] = (emotionCounts[emotion] || 0) + 1;
+        }
+    }
+    const hasSignal = Object.keys(genreCounts).length > 0 || Object.keys(emotionCounts).length > 0;
+
+    const candidatesSql = `
+        SELECT ${workListColumnsSql(sessionUser)}
+        FROM works w
+        JOIN users u ON u.id = w.owner_id
+        WHERE w.visibility = 'public' AND w.owner_id != ?
+        ORDER BY like_count DESC, w.view_count DESC, w.created_at DESC
+        LIMIT 200`;
+    const { results } = await env.DB.prepare(candidatesSql).bind(sessionUser.id, sessionUser.id).all();
+    const candidates = results.map(mapWorkRow).filter((w) => !openedIds.has(w.id));
+
+    if (!hasSignal) {
+        return json({ works: candidates.slice(0, 6) }); // already like_count-sorted
+    }
+
+    const scored = candidates
+        .map((w) => {
+            const genreScore = w.genre ? (genreCounts[w.genre] || 0) : 0;
+            const emotionScore = w.emotions.reduce((sum, e) => sum + (emotionCounts[e] || 0), 0);
+            return { w, score: genreScore + emotionScore };
+        })
+        .sort((a, b) => b.score - a.score || b.w.like_count - a.w.like_count);
+
+    return json({ works: scored.slice(0, 6).map((s) => s.w) });
 }
 
 // Escape text for safe placement inside an HTML attribute or element body.
@@ -639,7 +953,7 @@ async function handleGetWork(env, id, sessionUser) {
     const ownedByViewer = sessionUser && sessionUser.id === work.owner_id;
     if (work.visibility === 'private' && !ownedByViewer) return json({ error: 'Work not found' }, 404);
 
-    const [scenes, lines, cast, emotions] = await Promise.all([
+    const [scenes, lines, cast, emotions, counts, owner, myReaction] = await Promise.all([
         env.DB.prepare('SELECT * FROM scenes WHERE work_id = ? ORDER BY idx').bind(id).all(),
         env.DB.prepare(`SELECT sl.* FROM scene_lines sl
                         JOIN scenes s ON s.id = sl.scene_id
@@ -648,6 +962,15 @@ async function handleGetWork(env, id, sessionUser) {
                         JOIN characters c ON c.id = wc.character_id
                         WHERE wc.work_id = ?`).bind(id).all(),
         env.DB.prepare('SELECT emotion FROM work_emotions WHERE work_id = ?').bind(id).all(),
+        env.DB.prepare(
+            `SELECT
+                (SELECT COUNT(*) FROM work_reactions WHERE work_id = ? AND reaction = 'like') AS like_count,
+                (SELECT COUNT(*) FROM work_reactions WHERE work_id = ? AND reaction = 'dislike') AS dislike_count`
+        ).bind(id, id).first(),
+        env.DB.prepare('SELECT handle FROM users WHERE id = ?').bind(work.owner_id).first(),
+        sessionUser
+            ? env.DB.prepare('SELECT reaction FROM work_reactions WHERE work_id = ? AND user_id = ?').bind(id, sessionUser.id).first()
+            : null,
     ]);
 
     const linesByScene = {};
@@ -660,6 +983,10 @@ async function handleGetWork(env, id, sessionUser) {
         emotions: emotions.results.map((e) => e.emotion),
         characters: cast.results,
         scenes: scenes.results.map((s) => ({ ...s, lines: linesByScene[s.id] || [] })),
+        like_count: counts.like_count,
+        dislike_count: counts.dislike_count,
+        my_reaction: myReaction?.reaction ?? null,
+        owner_handle: owner?.handle ?? null,
     });
 }
 
@@ -901,6 +1228,11 @@ async function handleMedia(env, path) {
 // Saving requires a signed-in owner. The 'guest' system user (migration
 // 0004) is legacy-only now: existing guest-owned rows keep working, but
 // nothing new is written there — a logged-out visitor gets a 401 instead.
+// Ownership: `ownerId` below is always the session user, so a story
+// generated from someone's prompt and saved while they're logged in is
+// owned by them, full stop — never by 'lisa'. The 'lisa' owner_id is
+// reserved for the seed/built-in rows from migrations 0001-0002; nothing
+// in this handler can ever write it.
 async function handleCreateWork(env, request, body) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
 
@@ -1021,11 +1353,31 @@ export default {
                 }
                 if (path === '/generate-story') return await handleGenerateStory(env, anthropic, body);
                 if (path === '/api/works') return await handleCreateWork(env, request, body);
+                if (path.startsWith('/api/works/') && path.endsWith('/view')) {
+                    const id = decodeURIComponent(path.slice('/api/works/'.length, -'/view'.length));
+                    return await handleTrackView(env, id, await getSessionUser(env, request));
+                }
+                if (path.startsWith('/api/works/') && path.endsWith('/reaction')) {
+                    const id = decodeURIComponent(path.slice('/api/works/'.length, -'/reaction'.length));
+                    return await handleReaction(env, id, await getSessionUser(env, request), body);
+                }
                 if (path === '/auth/logout') return await handleAuthLogout(env, request);
+            }
+
+            if (method === 'PATCH') {
+                if (path.startsWith('/api/works/')) {
+                    const body = await request.json().catch(() => ({}));
+                    const id = decodeURIComponent(path.slice('/api/works/'.length));
+                    return await handleUpdateWork(env, id, await getSessionUser(env, request), body);
+                }
             }
 
             if (method === 'DELETE') {
                 if (path === '/api/me') return await handleDeleteMe(env, request);
+                if (path.startsWith('/api/works/')) {
+                    const id = decodeURIComponent(path.slice('/api/works/'.length));
+                    return await handleDeleteWork(env, id, await getSessionUser(env, request));
+                }
             }
 
             if (method === 'GET') {
@@ -1034,6 +1386,8 @@ export default {
                     return await handleSharePage(env, url, decodeURIComponent(path.slice('/s/'.length)));
                 }
                 if (path === '/api/works') return await handleListWorks(env, url, await getSessionUser(env, request));
+                if (path === '/api/me/works') return await handleMyWorks(env, await getSessionUser(env, request));
+                if (path === '/api/me/recommendations') return await handleRecommendations(env, await getSessionUser(env, request));
                 if (path.startsWith('/api/works/') && path.endsWith('/narration')) {
                     const id = decodeURIComponent(path.slice('/api/works/'.length, -'/narration'.length));
                     return await handleGetNarration(env, id, url.searchParams.get('voice'), await getSessionUser(env, request));

@@ -51,8 +51,11 @@ window.LisaCards = (function () {
         const buttons = {};
 
         function paint() {
+            // Zero counts stay hidden — a wall of "0 / 0" makes new stories
+            // feel dead; the icons alone still invite the first reaction.
             for (const kind of ['like', 'dislike']) {
-                buttons[kind].textContent = `${kind === 'like' ? '👍' : '👎'} ${counts[kind]}`;
+                const n = counts[kind];
+                buttons[kind].textContent = `${kind === 'like' ? '👍' : '👎'}${n > 0 ? ' ' + n : ''}`;
                 buttons[kind].classList.toggle('active', mine === kind);
             }
         }
@@ -232,10 +235,12 @@ window.LisaCards = (function () {
             const meta = document.createElement('div');
             meta.className = 'card-meta';
             meta.appendChild(ownerTag(work));
-            const views = document.createElement('span');
-            views.className = 'view-count';
-            views.textContent = `👁 ${work.view_count || 0}`;
-            meta.appendChild(views);
+            if ((work.view_count || 0) > 0) {
+                const views = document.createElement('span');
+                views.className = 'view-count';
+                views.textContent = `👁 ${work.view_count}`;
+                meta.appendChild(views);
+            }
             body.appendChild(meta);
         }
 
@@ -246,7 +251,7 @@ window.LisaCards = (function () {
         const footer = document.createElement('div');
         footer.className = 'card-footer';
         const button = document.createElement('button');
-        button.textContent = 'Read More →';
+        button.textContent = 'Read story →';
         footer.appendChild(button);
         if (work.id) footer.appendChild(reactionBar(work, me));
         body.appendChild(footer);

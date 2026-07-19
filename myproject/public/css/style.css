@@ -3,8 +3,9 @@
     --bg-raise: rgba(255, 255, 255, 0.06);
     --bg-raise-2: rgba(255, 255, 255, 0.02);
     --text: #EDEAF7;
-    --text-muted: #A79FC4;
-    --text-faint: #6E668D;
+    /* Lifted for WCAG AA on the night background — muted ≈ 8:1, faint ≈ 5:1 */
+    --text-muted: #B3ABD1;
+    --text-faint: #8B82AC;
     --purple: #8B5CF6;
     --purple-deep: #6D28D9;
     --lavender: #C4B5FD;
@@ -15,6 +16,13 @@
 }
 
 * { box-sizing: border-box; }
+
+/* Keyboard users always see where they are — amber ring on anything focusable */
+:focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
 
 body {
     font-family: 'Karla', sans-serif;
@@ -527,7 +535,8 @@ header { background: transparent; }
 .page-header {
     position: relative;
     overflow: hidden;
-    padding: 64px 24px 46px;
+    /* Kept shallow so the actual content starts within the first screen */
+    padding: 38px 24px 28px;
     text-align: center;
     background: radial-gradient(ellipse 60% 70% at 50% -10%, rgba(109, 40, 217, 0.45), transparent 70%);
 }
@@ -535,8 +544,8 @@ header { background: transparent; }
 .page-header-inner { position: relative; z-index: 2; }
 
 .page-header h1 {
-    margin: 0 0 12px;
-    font-size: 48px;
+    margin: 0 0 10px;
+    font-size: 42px;
 }
 
 .page-header p {
@@ -1246,9 +1255,17 @@ button.ghost.save-locked:hover {
     padding: 18px 22px 22px;
 }
 
+/* Clamped so every card keeps the same rhythm: titles two lines max,
+   excerpts three — footers stay aligned across the whole grid. */
 .story-card h2 {
     margin: 0 0 8px;
     font-size: 20px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 2.5em;
+    line-height: 1.25;
 }
 
 .story-card p {
@@ -1257,6 +1274,10 @@ button.ghost.save-locked:hover {
     font-size: 14px;
     line-height: 1.6;
     color: var(--text-muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .story-card button { align-self: flex-start; font-size: 14px; padding: 10px 20px; }
@@ -1643,19 +1664,42 @@ footer button#aboutButton:hover { color: #fff; transform: none; box-shadow: none
 .library-search {
     max-width: 1140px;
     width: 100%;
-    margin: 18px auto 6px;
+    margin: 14px auto 6px;
     padding: 0 24px;
     box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
 }
 
 .library-search.hidden { display: none; }
 
 .library-search input {
+    flex: 1;
+    min-width: 200px;
     max-width: 420px;
     border-radius: 999px;
     padding: 12px 20px;
     margin-bottom: 0;
     background-color: rgba(23, 17, 48, 0.8);
+}
+
+.library-search select {
+    width: auto;
+    margin-bottom: 0;
+    padding: 10px 34px 10px 16px;
+    border-radius: 999px;
+    font-size: 14px;
+    background-color: rgba(23, 17, 48, 0.8);
+}
+
+.results-count {
+    margin-left: auto;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-faint);
+    white-space: nowrap;
 }
 
 /* ---------- Card engagement (owner tag, views, reactions, kebab) ---------- */

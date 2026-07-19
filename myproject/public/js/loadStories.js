@@ -4,9 +4,32 @@
 // Signed-in viewer (or null), shared from auth.js — gates reactions and
 // unlocks the owner options in each card's ⋮ menu.
 let libraryMe = null;
+// Last fetched result set, re-sorted client-side when the sort changes.
+let lastWorks = [];
+
+function sortWorks(works) {
+    const mode = document.getElementById('librarySort')?.value || 'recommended';
+    if (mode === 'recommended') return works; // server order: top-viewed pinned, then most liked
+    const sorted = [...works];
+    if (mode === 'newest') sorted.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+    if (mode === 'views') sorted.sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
+    if (mode === 'likes') sorted.sort((a, b) => (b.like_count || 0) - (a.like_count || 0));
+    return sorted;
+}
+
+function anyFilterActive() {
+    return Object.values(libraryFilters).some(Boolean);
+}
 
 function renderWorks(mainElement, works) {
+    lastWorks = works;
     mainElement.innerHTML = '';
+
+    const count = document.getElementById('resultsCount');
+    if (count) count.textContent = `${works.length} ${works.length === 1 ? 'story' : 'stories'}`;
+    const clear = document.getElementById('clearFilters');
+    if (clear) clear.hidden = !anyFilterActive();
+
     if (!works.length) {
         const empty = document.createElement('p');
         empty.className = 'library-empty';
@@ -16,7 +39,7 @@ function renderWorks(mainElement, works) {
         mainElement.appendChild(empty);
         return;
     }
-    works.forEach(work => LisaCards.buildWorkCard(mainElement, work, { me: libraryMe }));
+    sortWorks(works).forEach(work => LisaCards.buildWorkCard(mainElement, work, { me: libraryMe }));
 }
 
 // Active filter state; empty string = "All" for that group.
@@ -46,20 +69,50 @@ function buildGenreChips(works) {
     });
 }
 
+function paintChipStates() {
+    document.querySelectorAll('#library-filters .chip').forEach((chip) => {
+        chip.setAttribute('aria-pressed', chip.classList.contains('active') ? 'true' : 'false');
+    });
+}
+
 function activateFilterBar(mainElement) {
     const bar = document.getElementById('library-filters');
     bar.classList.remove('hidden');
+    paintChipStates();
     bar.addEventListener('click', async (event) => {
         const chip = event.target.closest('.chip');
         if (!chip) return;
         const group = chip.closest('.filter-group');
         group.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
+        paintChipStates();
         libraryFilters[group.getAttribute('data-param')] = chip.getAttribute('data-value');
         try {
             renderWorks(mainElement, await fetchWorks());
         } catch (error) {
             console.error('Error filtering stories:', error);
+        }
+    });
+
+    // Sort re-orders the already-fetched set — no refetch needed.
+    const sortSelect = document.getElementById('librarySort');
+    if (sortSelect) sortSelect.addEventListener('change', () => renderWorks(mainElement, lastWorks));
+
+    // Clear filters: back to All everywhere, empty search, refetch.
+    const clear = document.getElementById('clearFilters');
+    if (clear) clear.addEventListener('click', async () => {
+        for (const key of Object.keys(libraryFilters)) libraryFilters[key] = '';
+        const search = document.getElementById('librarySearch');
+        if (search) search.value = '';
+        document.querySelectorAll('#library-filters .filter-group').forEach((group) => {
+            group.querySelectorAll('.chip').forEach((c) =>
+                c.classList.toggle('active', c.getAttribute('data-value') === ''));
+        });
+        paintChipStates();
+        try {
+            renderWorks(mainElement, await fetchWorks());
+        } catch (error) {
+            console.error('Error clearing filters:', error);
         }
     });
 }

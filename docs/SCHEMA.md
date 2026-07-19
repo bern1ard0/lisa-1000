@@ -154,7 +154,9 @@ CREATE TABLE works (
                   -- unlisted: reachable by direct link/share page, never listed
                   -- public:   shown in the shared Library
   cover_image_url TEXT,                   -- R2
-  created_at      INTEGER NOT NULL
+  created_at      INTEGER NOT NULL,
+  view_count      INTEGER NOT NULL DEFAULT 0  -- migration 0006; bumped by
+                                               -- POST /api/works/:id/view
 );
 
 CREATE INDEX idx_works_owner      ON works(owner_id);
@@ -176,6 +178,38 @@ CREATE TABLE work_characters (
   role         TEXT,                      -- 'protagonist','friend','villain'
   PRIMARY KEY (work_id, character_id)
 );
+```
+
+### work_reactions  (migration 0006)
+One like/dislike per (work, user). Flipping like↔dislike replaces the row
+rather than stacking a second one — `INSERT OR REPLACE` on the primary key.
+
+```sql
+CREATE TABLE work_reactions (
+  work_id    TEXT NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id),
+  reaction   TEXT NOT NULL CHECK (reaction IN ('like','dislike')),
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (work_id, user_id)
+);
+```
+
+### user_events  (migration 0006)
+A lightweight signal log — one row per open/search/like — that
+`GET /api/me/recommendations` reads back to score "recommended for you"
+against a work's genre and emotions. Not a general analytics table; nothing
+else consumes it.
+
+```sql
+CREATE TABLE user_events (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id),
+  kind       TEXT NOT NULL CHECK (kind IN ('open','search','like')),
+  work_id    TEXT REFERENCES works(id) ON DELETE CASCADE,  -- NULL for 'search'
+  query      TEXT,                       -- the search string, 'search' rows only
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_user_events_user ON user_events(user_id, created_at);
 ```
 
 **Kind rules (enforced in the app layer):**
@@ -350,6 +384,12 @@ For `kind: "story"`, `characters` may be empty and `lines` may be omitted —
 | Library: Story / Play chip | `works.kind = :k` |
 | Library: by character | join `work_characters` on `character_id` |
 | Library: sad / happy | join `work_emotions` on `emotion` |
+| Library: search | `GET /api/works?q=` — `works.title LIKE '%:q%' COLLATE NOCASE` |
+| Library: default order | no filters/`q`: top 3 by `view_count` (ties by `like_count`) pinned first, then the rest by `like_count DESC, view_count DESC, created_at DESC`; any filter/`q` present: `like_count DESC, created_at DESC` — pinning is a JS partition over one query, not a second query |
+| Views / likes / dislikes | `works.view_count`; `work_reactions` grouped by `reaction` — `POST /api/works/:id/view`, `POST /api/works/:id/reaction` |
+| Owner-only visibility change / delete | `PATCH /api/works/:id`, `DELETE /api/works/:id` — 404 if missing, 403 if signed-in user isn't `owner_id` |
+| "My stories" | `GET /api/me/works` — every work owned by the signed-in user, any visibility |
+| "Recommended for you" | `GET /api/me/recommendations` — `user_events` (kind `open`/`like`) joined back to `works`/`work_emotions` for genre/emotion overlap; falls back to most-liked public works with no signal |
 | "Hear this voice" previews | `voices.preview_audio_url` |
 | Language voice bank | voice resolution rule (§2 voices) |
 | Replay without credits | `narrations` cache hit — `GET /api/works/:id/narration` |

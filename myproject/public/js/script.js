@@ -45,8 +45,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Load initial story on page load
-    fetchAndDisplayStory(1);
+    // Load initial story on page load ("Sue's Thoughtful Act" — Spot was
+    // retired from the homepage by request)
+    fetchAndDisplayStory(4);
 });
 
 const messages = [

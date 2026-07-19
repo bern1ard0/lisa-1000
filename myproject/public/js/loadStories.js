@@ -1,76 +1,26 @@
-// Build one library card. Clicking anywhere on it (or the Read button)
-// opens the story's own reader page.
-function buildStoryCard(mainElement, { title, image, excerpt, href }) {
-    const card = document.createElement('div');
-    card.className = 'story-card story-card-link';
-    card.addEventListener('click', () => { window.location.href = href; });
+// Card rendering lives in js/cards.js (LisaCards.buildWorkCard) — shared
+// with the My Stories page so both grids stay identical.
 
-    // Cover artwork, never cropped: letterboxed in a 16:9 frame whose sides
-    // are a blurred copy of the same image. Lettered placeholder if missing.
-    const frame = document.createElement('div');
-    frame.className = 'cover-frame card-cover';
-
-    const coverBg = document.createElement('img');
-    coverBg.className = 'cover-frame-bg';
-    coverBg.src = image || '';
-    coverBg.alt = '';
-    coverBg.setAttribute('aria-hidden', 'true');
-    coverBg.loading = 'lazy';
-
-    const cover = document.createElement('img');
-    cover.className = 'cover-frame-fg';
-    cover.src = image || '';
-    cover.alt = `${title} cover`;
-    cover.loading = 'lazy';
-    cover.onerror = function() {
-        const placeholder = document.createElement('div');
-        placeholder.className = 'cover-placeholder';
-        placeholder.textContent = title.charAt(0);
-        frame.replaceWith(placeholder);
-    };
-
-    frame.appendChild(coverBg);
-    frame.appendChild(cover);
-    card.appendChild(frame);
-
-    const body = document.createElement('div');
-    body.className = 'card-body';
-
-    const heading = document.createElement('h2');
-    heading.textContent = title;
-
-    const text = document.createElement('p');
-    text.textContent = excerpt.substring(0, 150) + '...';
-
-    const button = document.createElement('button');
-    button.textContent = 'Read More →';
-
-    body.appendChild(heading);
-    body.appendChild(text);
-    body.appendChild(button);
-    card.appendChild(body);
-    mainElement.appendChild(card);
-}
+// Signed-in viewer (or null), shared from auth.js — gates reactions and
+// unlocks the owner options in each card's ⋮ menu.
+let libraryMe = null;
 
 function renderWorks(mainElement, works) {
     mainElement.innerHTML = '';
     if (!works.length) {
         const empty = document.createElement('p');
         empty.className = 'library-empty';
-        empty.textContent = 'No stories match these filters — try widening them.';
+        empty.textContent = libraryFilters.q
+            ? `No stories found for “${libraryFilters.q}” — try another search.`
+            : 'No stories match these filters — try widening them.';
         mainElement.appendChild(empty);
         return;
     }
-    works.forEach(work => buildStoryCard(mainElement, {
-        title: work.title,
-        image: work.cover_image_url,
-        excerpt: work.excerpt || '',
-        href: `story.html?id=${encodeURIComponent(work.id)}`,
-    }));
+    works.forEach(work => LisaCards.buildWorkCard(mainElement, work, { me: libraryMe }));
 }
 
 // Active filter state; empty string = "All" for that group.
-const libraryFilters = { owner: '', kind: '', genre: '', emotion: '' };
+const libraryFilters = { owner: '', kind: '', genre: '', emotion: '', q: '' };
 
 async function fetchWorks() {
     const params = new URLSearchParams();
@@ -114,11 +64,31 @@ function activateFilterBar(mainElement) {
     });
 }
 
+// Debounced title search — refetches the library as the visitor types.
+function activateSearch(mainElement) {
+    const input = document.getElementById('librarySearch');
+    if (!input) return;
+    input.parentElement.classList.remove('hidden');
+    let timer = null;
+    input.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(async () => {
+            libraryFilters.q = input.value.trim();
+            try {
+                renderWorks(mainElement, await fetchWorks());
+            } catch (error) {
+                console.error('Error searching stories:', error);
+            }
+        }, 300);
+    });
+}
+
 // Works API (D1) first; stories.json as fallback for environments without
 // a database (local Express dev, static preview). Filters only appear in
 // API mode — the flat JSON has no genre/emotion data to filter on.
 async function loadLibrary() {
     const mainElement = document.getElementById('story-list');
+    libraryMe = window.lisaMePromise ? await window.lisaMePromise : null;
 
     try {
         const works = await fetchWorks();
@@ -126,6 +96,7 @@ async function loadLibrary() {
             renderWorks(mainElement, works);
             buildGenreChips(works);
             activateFilterBar(mainElement);
+            activateSearch(mainElement);
             return;
         }
     } catch (error) {
@@ -133,12 +104,12 @@ async function loadLibrary() {
     }
 
     const stories = await fetch('data/stories.json').then(r => r.json());
-    stories.sort((a, b) => a.id - b.id).forEach(story => buildStoryCard(mainElement, {
+    stories.sort((a, b) => a.id - b.id).forEach(story => LisaCards.buildWorkCard(mainElement, {
         title: story.title,
-        image: story.image,
+        cover_image_url: story.image,
         excerpt: story.content,
-        href: `story.html?sid=${story.id}`,
-    }));
+        sid: story.id,
+    }, {}));
 }
 
 document.addEventListener('DOMContentLoaded', function() {

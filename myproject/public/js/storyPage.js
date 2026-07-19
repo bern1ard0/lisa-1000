@@ -31,6 +31,10 @@ async function fetchStory() {
                     narration: (work.scenes || []).map((s) => s.narration_text || s.display_text).join('\n'),
                     language: work.language || 'en',
                     visibility: work.visibility,
+                    view_count: work.view_count || 0,
+                    like_count: work.like_count || 0,
+                    dislike_count: work.dislike_count || 0,
+                    my_reaction: work.my_reaction || null,
                 };
             }
         } catch (error) {
@@ -98,6 +102,71 @@ async function renderStory() {
         coverWrapEl.classList.remove('hidden');
         coverEl.onerror = () => coverWrapEl.classList.add('hidden');
     }
+
+    if (story.id) {
+        buildEngagementRow(story, titleEl);
+        // Count the open (fire-and-forget) and reflect the fresh total.
+        fetch(`/api/works/${encodeURIComponent(story.id)}/view`, { method: 'POST' })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+                const el = document.getElementById('story-view-count');
+                if (data && el) el.textContent = `👁 ${data.view_count}`;
+            })
+            .catch(() => {});
+    }
+}
+
+// Views + like/dislike, rendered directly under the story title.
+function buildEngagementRow(story, titleEl) {
+    const row = document.createElement('div');
+    row.className = 'engagement-row';
+
+    const views = document.createElement('span');
+    views.id = 'story-view-count';
+    views.className = 'view-count';
+    views.textContent = `👁 ${story.view_count}`;
+    row.appendChild(views);
+
+    const counts = { like: story.like_count, dislike: story.dislike_count };
+    let mine = story.my_reaction;
+    const buttons = {};
+    const paint = () => {
+        for (const kind of ['like', 'dislike']) {
+            buttons[kind].textContent = `${kind === 'like' ? '👍' : '👎'} ${counts[kind]}`;
+            buttons[kind].classList.toggle('active', mine === kind);
+        }
+    };
+    for (const kind of ['like', 'dislike']) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'reaction-btn';
+        btn.addEventListener('click', async () => {
+            const next = mine === kind ? null : kind;
+            try {
+                const resp = await fetch(`/api/works/${encodeURIComponent(story.id)}/reaction`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reaction: next }),
+                });
+                if (resp.status === 401) {
+                    notifyUser('Log in to react', 'Reactions need an account — use the Log in button in the menu.');
+                    return;
+                }
+                if (!resp.ok) throw new Error(`Reaction failed (${resp.status})`);
+                const data = await resp.json();
+                counts.like = data.like_count;
+                counts.dislike = data.dislike_count;
+                mine = data.my_reaction;
+                paint();
+            } catch (error) {
+                console.error('Could not save reaction:', error);
+            }
+        });
+        buttons[kind] = btn;
+        row.appendChild(btn);
+    }
+    paint();
+    titleEl.insertAdjacentElement('afterend', row);
 }
 
 // ---------- Narration cache + word highlighting (saved works only) ----------

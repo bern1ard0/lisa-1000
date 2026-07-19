@@ -50,6 +50,13 @@ document.addEventListener('DOMContentLoaded', function() {
 // Why the last generation failed, for the error card shown to the user.
 let lastGenerationError = '';
 
+// The cartoon style sent with every generation; the server enforces the
+// no-photorealism suffix regardless. 'surprise' lets the server pick.
+function selectedArtStyle() {
+    const picker = document.getElementById('artStyle');
+    return picker ? picker.value : 'surprise';
+}
+
 async function generateStory(prompt) {
     console.log('Contacting story server with prompt:', prompt); // Debugging code
     lastGenerationError = '';
@@ -64,7 +71,7 @@ async function generateStory(prompt) {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ prompt: prompt })
+                body: JSON.stringify({ prompt: prompt, style: selectedArtStyle() })
             });
 
             if (!response.ok) {
@@ -235,19 +242,43 @@ document.addEventListener('DOMContentLoaded', function() {
 
         let visibility = 'public';
         if (window.Swal) {
+            // Tactile option cards instead of bare radios — each choice is a
+            // full-width card with an icon, a name, and what it means.
+            const options = [
+                { value: 'public', icon: '🌍', name: 'Public', desc: 'Everyone can find it in the Library' },
+                { value: 'unlisted', icon: '🔗', name: 'Unlisted', desc: 'Only people with the link can read it' },
+                { value: 'private', icon: '🔒', name: 'Private', desc: 'Only you — it lives in My Stories' },
+            ];
+            const cardsHtml = options.map((o, i) => `
+                <label class="save-option${i === 0 ? ' selected' : ''}">
+                    <input type="radio" name="save-visibility" value="${o.value}"${i === 0 ? ' checked' : ''}>
+                    <span class="save-option-icon">${o.icon}</span>
+                    <span class="save-option-text">
+                        <span class="save-option-name">${o.name}</span>
+                        <span class="save-option-desc">${o.desc}</span>
+                    </span>
+                </label>`).join('');
             const choice = await Swal.fire({
                 title: 'Save to Library',
-                text: 'Who should see this story?',
-                input: 'radio',
-                inputOptions: {
-                    public: '🌍 Everyone',
-                    unlisted: '🔗 Only people with the link',
-                    private: '🔒 Private (only you)',
-                },
-                inputValue: 'public',
+                html: `<p class="save-dialog-lead">Where should “${(currentStory.title || 'your story').replace(/</g, '&lt;')}” live?</p>
+                       <div class="save-options">${cardsHtml}</div>`,
                 showCancelButton: true,
-                confirmButtonText: 'Save',
-                confirmButtonColor: '#8B5CF6',
+                confirmButtonText: '✨ Save story',
+                cancelButtonText: 'Not yet',
+                confirmButtonColor: '#FBBF24',
+                customClass: { popup: 'save-dialog', confirmButton: 'save-dialog-confirm' },
+                background: '#171130',
+                color: '#EDEAF7',
+                didOpen: (popup) => {
+                    popup.querySelectorAll('.save-option').forEach((label) => {
+                        label.addEventListener('click', () => {
+                            popup.querySelectorAll('.save-option').forEach((l) => l.classList.remove('selected'));
+                            label.classList.add('selected');
+                        });
+                    });
+                },
+                preConfirm: () =>
+                    document.querySelector('input[name="save-visibility"]:checked')?.value || 'public',
             });
             if (!choice.isConfirmed) return;
             visibility = choice.value || 'public';
@@ -336,7 +367,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
-    function displayStory(story, imageUrl, title = 'Generated Story') {
+    function displayStory(story, imageUrl, title = 'Generated Story', styleUsed = null) {
         if (!story) {
             storyContainer.classList.add('generated-story');
             storyContainer.innerHTML = `
@@ -349,6 +380,7 @@ document.addEventListener('DOMContentLoaded', function() {
         storyContainer.innerHTML = `
             <h2>${title}</h2>
             <img src="${imageUrl}" alt="Generated Image" class="generated-image">
+            ${styleUsed ? `<p class="style-caption">🎨 Illustrated in: ${styleUsed}</p>` : ''}
             <p id="story-content">${story}</p>`;
         storyContainer.classList.add('generated-story');
         storyContainer.style.transition = 'opacity 0.5s ease';
@@ -385,7 +417,7 @@ document.addEventListener('DOMContentLoaded', function() {
         stopLoading();
         if (storyData) {
             const storyTitle = storyData.title || `Generated ${randomGenre} Story`;
-            displayStory(storyData.story, storyData.imageUrl, storyTitle);
+            displayStory(storyData.story, storyData.imageUrl, storyTitle, storyData.styleUsed);
             currentNarration = storyData.narration || null;
             setCurrentStory(storyTitle, randomGenre, 'en', storyData);
             buttonContainer.style.display = 'flex';
@@ -413,7 +445,7 @@ document.addEventListener('DOMContentLoaded', function() {
         stopLoading();
         if (storyData) {
             const storyTitle = storyData.title || `Generated ${genre} Story`;
-            displayStory(storyData.story, storyData.imageUrl, storyTitle);
+            displayStory(storyData.story, storyData.imageUrl, storyTitle, storyData.styleUsed);
             currentNarration = storyData.narration || null;
             setCurrentStory(storyTitle, genre, 'en', storyData);
             buttonContainer.style.display = 'flex';
@@ -444,7 +476,7 @@ document.addEventListener('DOMContentLoaded', function() {
         stopLoading();
         if (storyData) {
             const storyTitle = title.trim() || storyData.title || 'My Story';
-            displayStory(storyData.story, storyData.imageUrl, storyTitle);
+            displayStory(storyData.story, storyData.imageUrl, storyTitle, storyData.styleUsed);
             currentNarration = storyData.narration || null;
             setCurrentStory(storyTitle, theme, outputLanguage, storyData);
             buttonContainer.style.display = 'flex';

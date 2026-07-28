@@ -13,6 +13,13 @@
     "main": "worker/index.js",
     "compatibility_date": "2026-07-01",
     "compatibility_flags": ["nodejs_compat"],
+    // Custom domains (zone already on this Cloudflare account): every
+    // `npm run deploy` keeps lisa1000.com pointed at this Worker — DNS
+    // records and TLS certificates are created automatically on deploy.
+    "routes": [
+        { "pattern": "lisa1000.com", "custom_domain": true },
+        { "pattern": "www.lisa1000.com", "custom_domain": true }
+    ],
     "assets": {
         "directory": "./public"
     },

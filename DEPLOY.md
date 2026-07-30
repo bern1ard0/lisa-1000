@@ -36,6 +36,12 @@ goes to lisa1000.com.
    npx wrangler secret put HF_CREDENTIALS      # Higgsfield "KEY_ID:KEY_SECRET" for illustrations
    npx wrangler secret put GOOGLE_CLIENT_ID     # Google OAuth sign-in (see below)
    npx wrangler secret put GOOGLE_CLIENT_SECRET # Google OAuth sign-in (see below)
+   npx wrangler secret put STRIPE_SECRET_KEY            # Stripe API key (sk_live_... / sk_test_...)
+   npx wrangler secret put STRIPE_WEBHOOK_SECRET        # Stripe webhook signing secret (whsec_...)
+   npx wrangler secret put STRIPE_PRICE_PREMIUM_MONTHLY # price id of the monthly premium plan (price_...)
+   npx wrangler secret put STRIPE_PRICE_CREDITS_PACK    # price id of the one-time credit pack (price_...)
+   npx wrangler secret put RESEND_API_KEY               # OPTIONAL: renewal-reminder emails via Resend
+   npx wrangler secret put CREDITS_PER_PACK             # OPTIONAL: credits per pack (default 20)
    ```
 
    Rules of thumb:
@@ -57,6 +63,49 @@ goes to lisa1000.com.
       above (production) and `.dev.vars` (local — see below).
    5. The `sessions` table (`0005_sessions.sql`) ships with the `d1 migrations
       apply` step above — no separate step needed.
+
+   **Stripe billing setup** (subscription + free tier + credit packs):
+   1. Apply the billing migration (adds `billing_customers`, `subscriptions`,
+      `renewal_notices`, `usage_counters`, `credit_ledger` — see
+      `docs/SCHEMA.md`):
+      ```bash
+      npx wrangler d1 migrations apply lisa1000 --remote   # (--local for dev)
+      ```
+   2. In the Stripe dashboard create two prices and put their ids in the
+      secrets above:
+      - a **monthly recurring** price for Premium → `STRIPE_PRICE_PREMIUM_MONTHLY`
+      - a **one-time** price for the credit pack → `STRIPE_PRICE_CREDITS_PACK`
+   3. Dashboard → Developers → Webhooks → Add endpoint:
+      - Endpoint URL: **`https://lisa1000.com/api/billing/webhook`**
+      - Events: `checkout.session.completed`,
+        `customer.subscription.updated`, `customer.subscription.deleted`,
+        `invoice.upcoming`
+      - Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
+
+   **How the story-generation gate works** (`POST /generate-story`):
+   1. **Anonymous visitors** can read/browse the library free but must sign
+      in to generate — the endpoint returns `401 {"error":"login_required"}`.
+      (There is no anonymous session to meter against; requiring login was
+      the clean fit for the existing cookie-session auth.)
+   2. **Premium** (active/trialing Stripe subscription): unlimited.
+   3. **Free tier**: 5 story generations per calendar month (UTC).
+   4. **Credit packs**: past the free allowance, each generation spends 1
+      purchased credit (a pack grants 20, or `CREDITS_PER_PACK`).
+   5. Out of everything → `402 {"error":"free_limit_reached","used":N,
+      "limit":5,"credits":0,"upgrade":"/pricing.html"}` — the frontend
+      shows the upgrade prompt on this exact shape.
+
+   **Renewal reminders:** Stripe fires `invoice.upcoming` a few days before
+   each renewal charge. The worker records it in `renewal_notices` (surfaced
+   as `pending_renewal` on `GET /api/me`, so the frontend shows a "renews
+   soon" banner with a cancel path) and, when `RESEND_API_KEY` is set, also
+   emails the subscriber via Resend with the renewal date, amount, and a
+   manage/cancel link. Subscribers who created 2 or fewer stories that
+   billing period get the low-usage variant, which suggests cancelling or
+   switching to a one-time credit pack. Without `RESEND_API_KEY` the email
+   is skipped silently — the in-app banner still works. The email sends
+   from `billing@lisa1000.com`, so verify the lisa1000.com domain in Resend
+   first.
 
 3. **First deploy:**
    ```bash

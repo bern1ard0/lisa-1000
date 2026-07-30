@@ -101,14 +101,15 @@ function buildAccountMenu(user) {
 }
 
 // One shared /api/me fetch per page load — other scripts (cards, library,
-// My Stories) await window.lisaMePromise instead of refetching.
-window.lisaMePromise = fetch('/api/me')
+// My Stories) await window.lisaMePromise instead of refetching. billing.js
+// reads plan/usage/renewal fields from the full-payload promise.
+window.lisaMeFullPromise = fetch('/api/me')
     .then((resp) => resp.json())
-    .then((data) => data.user || null)
     .catch((error) => {
         console.error('Could not load sign-in state:', error);
         return null;
     });
+window.lisaMePromise = window.lisaMeFullPromise.then((data) => (data && data.user) || null);
 
 // Sign-in widget for the header nav. Every page has an empty <li id="auth-nav">
 // slot; this fills it in from /api/me so signed-out visitors see "Log in"

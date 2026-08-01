@@ -2231,6 +2231,43 @@ footer button#aboutButton:hover { color: #fff; transform: none; box-shadow: none
 
 .pricing-faq p { margin: 0; }
 
+/* ---------- Legal pages (terms, privacy) ---------- */
+.legal-main {
+    max-width: 780px;
+    width: 100%;
+    margin: 26px auto 0;
+    padding: 0 24px 48px;
+    box-sizing: border-box;
+}
+
+.legal-updated {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: var(--text-faint);
+}
+
+.legal-main section { margin-top: 28px; }
+
+.legal-main h2 {
+    margin: 0 0 8px;
+    font-size: 20px;
+}
+
+.legal-main p,
+.legal-main li {
+    margin: 0 0 10px;
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--text-muted);
+}
+
+.legal-main ul {
+    margin: 0 0 10px;
+    padding-left: 22px;
+}
+
+.legal-main a { color: var(--lavender); }
+
 /* "N of 5 free stories used" hint on the create page */
 .usage-hint {
     margin: -8px 0 0;

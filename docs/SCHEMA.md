@@ -212,6 +212,75 @@ CREATE TABLE user_events (
 CREATE INDEX idx_user_events_user ON user_events(user_id, created_at);
 ```
 
+### Billing  (migration 0007)
+Stripe subscription + free tier + credit packs. Premium (monthly Stripe
+subscription) = unlimited story generations; other signed-in users get 5
+free generations per calendar month, then spend purchased credits. All
+Stripe state is mirrored into D1 by `POST /api/billing/webhook` so the
+request path never calls Stripe.
+
+```sql
+-- One Stripe customer per user, created lazily on first checkout/portal use.
+CREATE TABLE billing_customers (
+  user_id            TEXT PRIMARY KEY REFERENCES users(id),
+  stripe_customer_id TEXT UNIQUE NOT NULL,
+  created_at         INTEGER NOT NULL
+);
+
+-- Mirror of Stripe subscription state, kept fresh by webhook events.
+CREATE TABLE subscriptions (
+  stripe_subscription_id TEXT PRIMARY KEY,
+  user_id                TEXT NOT NULL REFERENCES users(id),
+  status                 TEXT NOT NULL,   -- active, trialing, past_due, canceled, ...
+  price_id               TEXT,
+  current_period_end     INTEGER,         -- unix epoch seconds
+  cancel_at_period_end   INTEGER NOT NULL DEFAULT 0,
+  updated_at             INTEGER NOT NULL
+);
+CREATE INDEX idx_subscriptions_user ON subscriptions(user_id);
+
+-- Upcoming-renewal reminders from Stripe's invoice.upcoming webhook. Drives
+-- the "renews soon" banner (pending_renewal on GET /api/me) and the optional
+-- Resend reminder email. used_this_period/low_usage let the reminder suggest
+-- downgrading to credit packs when the subscriber barely used the month.
+CREATE TABLE renewal_notices (
+  id                     TEXT PRIMARY KEY,
+  user_id                TEXT NOT NULL REFERENCES users(id),
+  stripe_subscription_id TEXT NOT NULL,
+  renewal_at             INTEGER NOT NULL,
+  amount_cents           INTEGER,
+  currency               TEXT,
+  notified_at            INTEGER NOT NULL,
+  emailed                INTEGER NOT NULL DEFAULT 0,
+  used_this_period       INTEGER,
+  low_usage              INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_renewal_notices_user ON renewal_notices(user_id, renewal_at);
+
+-- Free-tier meter: story generations per user per calendar month ('YYYY-MM',
+-- UTC). user_events could not be reused — its CHECK constraint only allows
+-- 'open'/'search'/'like'.
+CREATE TABLE usage_counters (
+  user_id TEXT NOT NULL REFERENCES users(id),
+  month   TEXT NOT NULL,
+  stories INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, month)
+);
+
+-- Credit packs (one-time Stripe payments). Balance = SUM(delta): a purchase
+-- inserts +N (default 20), each metered generation past the free allowance
+-- inserts -1 in the same batch as the usage bump.
+CREATE TABLE credit_ledger (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id),
+  delta      INTEGER NOT NULL,
+  reason     TEXT NOT NULL CHECK (reason IN ('purchase','spend','grant')),
+  stripe_ref TEXT,          -- checkout session id for purchases (dedupes retries)
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_credit_ledger_user ON credit_ledger(user_id);
+```
+
 **Kind rules (enforced in the app layer):**
 
 | | `kind = 'story'` | `kind = 'play'` |

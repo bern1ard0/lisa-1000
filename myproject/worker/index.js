@@ -9,6 +9,12 @@
 //   HF_CREDENTIALS       Higgsfield "KEY_ID:KEY_SECRET" (story illustrations)
 //   GOOGLE_CLIENT_ID     Google OAuth sign-in (/auth/login, /auth/callback)
 //   GOOGLE_CLIENT_SECRET Google OAuth sign-in — paired with GOOGLE_CLIENT_ID
+//   STRIPE_SECRET_KEY    Stripe API (checkout, portal, customers)
+//   STRIPE_WEBHOOK_SECRET          Stripe webhook signature verification
+//   STRIPE_PRICE_PREMIUM_MONTHLY   price id for the monthly premium plan
+//   STRIPE_PRICE_CREDITS_PACK      price id for the one-time credit pack
+//   RESEND_API_KEY       (optional) renewal-reminder emails via Resend
+//   CREDITS_PER_PACK     (optional) credits granted per pack, default 20
 
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -548,9 +554,21 @@ function parseStoryParts(text) {
     return { title, story, narration: narration || story, imagePrompt };
 }
 
-async function handleGenerateStory(env, anthropic, body) {
+async function handleGenerateStory(env, anthropic, request, body) {
     const prompt = body.prompt;
     if (!prompt) return json({ error: 'No prompt provided' }, 400);
+
+    // Metering: generation requires sign-in (401 for anonymous visitors —
+    // there's no anonymous session to meter against; browsing stays free).
+    // Then premium -> unlimited, free allowance -> credits -> 402. Classic
+    // local mode without D1 stays ungated, same as every other DB feature.
+    let sessionUser = null;
+    let gate = { spendCredit: false };
+    if (env.DB) {
+        sessionUser = await getSessionUser(env, request);
+        gate = await gateStoryGeneration(env, sessionUser);
+        if (gate instanceof Response) return gate;
+    }
 
     const { text } = await generateText(env, anthropic, {
         system: STORY_SYSTEM_PROMPT,
@@ -563,6 +581,10 @@ async function handleGenerateStory(env, anthropic, body) {
     const styleUsed = resolveCartoonStyle(body.style);
     const styledPrompt = applyCartoonStyle((imagePrompt || story).substring(0, 1000), styleUsed);
     const imageUrl = await generateCoverImage(env, styledPrompt);
+
+    // Only a successful generation counts against the meter/credits.
+    if (env.DB && sessionUser) await recordStoryGeneration(env, sessionUser.id, gate.spendCredit);
+
     return json({ title, story, narration, imageUrl, styleUsed });
 }
 
@@ -1146,10 +1168,46 @@ async function getSessionUser(env, request) {
     return user || null;
 }
 
-// GET /api/me
+// GET /api/me — identity plus billing state: plan, subscription mirror,
+// this month's usage, credit balance, and the latest not-yet-due renewal
+// notice (drives the "renews soon" banner).
 async function handleMe(env, request) {
     if (!env.DB) return json({ error: 'Database not configured' }, 501);
-    return json({ user: await getSessionUser(env, request) });
+
+    const user = await getSessionUser(env, request);
+    if (!user) return json({ user: null });
+
+    const sub = await getSubscription(env, user.id);
+    const premium = isPremiumSub(sub);
+    const [used, balance, pending] = await Promise.all([
+        getMonthlyUsage(env, user.id),
+        getCreditBalance(env, user.id),
+        env.DB.prepare(
+            `SELECT renewal_at, amount_cents, currency, low_usage, used_this_period
+             FROM renewal_notices WHERE user_id = ? AND renewal_at > ?
+             ORDER BY notified_at DESC LIMIT 1`
+        ).bind(user.id, Math.floor(Date.now() / 1000)).first(),
+    ]);
+
+    return json({
+        user,
+        plan: premium ? 'premium' : 'free',
+        subscription: sub ? {
+            status: sub.status,
+            current_period_end: sub.current_period_end,
+            cancel_at_period_end: !!sub.cancel_at_period_end,
+        } : null,
+        // limit is the free allowance; premium ignores it (plan says so).
+        usage: { used, limit: FREE_MONTHLY_STORIES },
+        credits: { balance: Math.max(0, balance) },
+        pending_renewal: pending ? {
+            renewal_at: pending.renewal_at,
+            amount_cents: pending.amount_cents,
+            currency: pending.currency,
+            low_usage: !!pending.low_usage,
+            used_this_period: pending.used_this_period,
+        } : null,
+    });
 }
 
 // POST /auth/logout — always succeeds; clears the cookie either way.
@@ -1191,6 +1249,457 @@ async function handleDeleteMe(env, request) {
     const headers = new Headers({ 'Content-Type': 'application/json' });
     headers.append('Set-Cookie', 'session=; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=0');
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+}
+
+// ---------- Billing (Stripe subscriptions + credit packs) ----------
+// Premium (monthly subscription) = unlimited story generations. Everyone
+// else signed in gets FREE_MONTHLY_STORIES per calendar month free, then
+// spends 1 purchased credit per story, then hits a 402. Stripe is driven
+// with raw form-encoded fetch (no SDK); subscription/customer state is
+// mirrored into D1 by the webhook so request-path checks never call Stripe.
+
+const FREE_MONTHLY_STORIES = 5;      // free story generations per calendar month
+const DEFAULT_CREDITS_PER_PACK = 20; // credits per pack purchase (env CREDITS_PER_PACK overrides)
+const LOW_USAGE_THRESHOLD = 2;       // <= this many stories in a billing period = "low usage" reminder
+const PREMIUM_STATUSES = ['active', 'trialing'];
+
+function creditsPerPack(env) {
+    const n = parseInt(env.CREDITS_PER_PACK, 10);
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_CREDITS_PER_PACK;
+}
+
+// 'YYYY-MM' (UTC) — the free-tier metering bucket.
+function currentMonth() {
+    return new Date().toISOString().slice(0, 7);
+}
+
+async function stripePost(env, path, params) {
+    const resp = await fetch(`https://api.stripe.com/v1/${path}`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams(params),
+    });
+    if (!resp.ok) throw new Error(`Stripe ${path} failed (${resp.status}): ${await resp.text()}`);
+    return resp.json();
+}
+
+async function stripeGet(env, path) {
+    const resp = await fetch(`https://api.stripe.com/v1/${path}`, {
+        headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}` },
+    });
+    if (!resp.ok) throw new Error(`Stripe ${path} failed (${resp.status}): ${await resp.text()}`);
+    return resp.json();
+}
+
+// One Stripe customer per user, created lazily on first checkout/portal use.
+async function getOrCreateStripeCustomer(env, sessionUser) {
+    const existing = await env.DB.prepare(
+        'SELECT stripe_customer_id FROM billing_customers WHERE user_id = ?'
+    ).bind(sessionUser.id).first();
+    if (existing) return existing.stripe_customer_id;
+
+    const customer = await stripePost(env, 'customers', {
+        email: sessionUser.email || '',
+        'metadata[user_id]': sessionUser.id,
+    });
+    // Concurrent first-checkout race: IGNORE the loser, re-read the winner.
+    await env.DB.prepare(
+        'INSERT OR IGNORE INTO billing_customers (user_id, stripe_customer_id, created_at) VALUES (?, ?, ?)'
+    ).bind(sessionUser.id, customer.id, Math.floor(Date.now() / 1000)).run();
+    const row = await env.DB.prepare(
+        'SELECT stripe_customer_id FROM billing_customers WHERE user_id = ?'
+    ).bind(sessionUser.id).first();
+    return row.stripe_customer_id;
+}
+
+// The user's most relevant subscription row: prefer a premium-status one,
+// then the most recently updated.
+async function getSubscription(env, userId) {
+    return await env.DB.prepare(
+        `SELECT * FROM subscriptions WHERE user_id = ?
+         ORDER BY (status IN ('active','trialing')) DESC, updated_at DESC LIMIT 1`
+    ).bind(userId).first();
+}
+
+// A day of grace past current_period_end covers webhook delivery lag around
+// a renewal — the subscriber shouldn't lose premium while Stripe retries.
+function isPremiumSub(sub) {
+    if (!sub || !PREMIUM_STATUSES.includes(sub.status)) return false;
+    if (!sub.current_period_end) return true;
+    return sub.current_period_end + 86400 > Math.floor(Date.now() / 1000);
+}
+
+async function getMonthlyUsage(env, userId) {
+    const row = await env.DB.prepare(
+        'SELECT stories FROM usage_counters WHERE user_id = ? AND month = ?'
+    ).bind(userId, currentMonth()).first();
+    return row?.stories ?? 0;
+}
+
+async function getCreditBalance(env, userId) {
+    const row = await env.DB.prepare(
+        'SELECT COALESCE(SUM(delta), 0) AS balance FROM credit_ledger WHERE user_id = ?'
+    ).bind(userId).first();
+    return row?.balance ?? 0;
+}
+
+// Decide whether this signed-in user may generate a story right now.
+// Order: premium -> unlimited; free monthly allowance; purchased credits;
+// otherwise the 402 the frontend codes against. Returns { spendCredit } to
+// proceed, or a Response (401/402) to return as-is.
+async function gateStoryGeneration(env, sessionUser) {
+    if (!sessionUser) {
+        return json({ error: 'login_required', login: '/auth/login', upgrade: '/pricing.html' }, 401);
+    }
+    if (isPremiumSub(await getSubscription(env, sessionUser.id))) return { spendCredit: false };
+
+    const used = await getMonthlyUsage(env, sessionUser.id);
+    if (used < FREE_MONTHLY_STORIES) return { spendCredit: false };
+
+    const credits = await getCreditBalance(env, sessionUser.id);
+    if (credits > 0) return { spendCredit: true };
+
+    return json({
+        error: 'free_limit_reached',
+        used,
+        limit: FREE_MONTHLY_STORIES,
+        credits: Math.max(0, credits),
+        upgrade: '/pricing.html',
+    }, 402);
+}
+
+// After a successful generation: bump the monthly meter (all signed-in
+// users, premium included — it also feeds the renewal reminder) and, when
+// the generation was credit-funded, spend the credit in the same batch.
+async function recordStoryGeneration(env, userId, spendCredit) {
+    const statements = [
+        env.DB.prepare(
+            `INSERT INTO usage_counters (user_id, month, stories) VALUES (?, ?, 1)
+             ON CONFLICT(user_id, month) DO UPDATE SET stories = stories + 1`
+        ).bind(userId, currentMonth()),
+    ];
+    if (spendCredit) {
+        statements.push(env.DB.prepare(
+            `INSERT INTO credit_ledger (id, user_id, delta, reason, stripe_ref, created_at)
+             VALUES (?, ?, -1, 'spend', NULL, ?)`
+        ).bind(`cl_${crypto.randomUUID()}`, userId, Math.floor(Date.now() / 1000)));
+    }
+    await env.DB.batch(statements);
+}
+
+// POST /api/billing/checkout  { plan: 'premium_monthly' } (default) or
+// { pack: 'credits' } — returns { url } to redirect the browser to.
+async function handleBillingCheckout(env, request, url, body) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+    if (!env.STRIPE_SECRET_KEY) return json({ error: 'Billing not configured' }, 501);
+    const sessionUser = await getSessionUser(env, request);
+    if (!sessionUser) return json({ error: 'Log in to upgrade' }, 401);
+
+    let product;
+    if (body?.pack !== undefined) {
+        if (body.pack !== 'credits') return json({ error: "pack must be 'credits'" }, 400);
+        product = 'credits';
+    } else if (body?.plan === undefined || body?.plan === 'premium_monthly') {
+        product = 'premium_monthly';
+    } else {
+        return json({ error: "plan must be 'premium_monthly'" }, 400);
+    }
+    const price = product === 'credits' ? env.STRIPE_PRICE_CREDITS_PACK : env.STRIPE_PRICE_PREMIUM_MONTHLY;
+    if (!price) return json({ error: 'Billing not configured' }, 501);
+
+    const customerId = await getOrCreateStripeCustomer(env, sessionUser);
+    const params = {
+        mode: product === 'credits' ? 'payment' : 'subscription',
+        customer: customerId,
+        client_reference_id: sessionUser.id,
+        'line_items[0][price]': price,
+        'line_items[0][quantity]': '1',
+        success_url: `${url.origin}/pricing.html?upgraded=1`,
+        cancel_url: `${url.origin}/pricing.html`,
+        'metadata[user_id]': sessionUser.id,
+    };
+    if (product === 'premium_monthly') params['subscription_data[metadata][user_id]'] = sessionUser.id;
+
+    const session = await stripePost(env, 'checkout/sessions', params);
+    return json({ url: session.url });
+}
+
+// POST /api/billing/portal — Stripe Billing Portal (manage/cancel/update
+// payment method). Returns { url }.
+async function handleBillingPortal(env, request, url) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+    if (!env.STRIPE_SECRET_KEY) return json({ error: 'Billing not configured' }, 501);
+    const sessionUser = await getSessionUser(env, request);
+    if (!sessionUser) return json({ error: 'Log in to manage billing' }, 401);
+
+    const customerId = await getOrCreateStripeCustomer(env, sessionUser);
+    const session = await stripePost(env, 'billing_portal/sessions', {
+        customer: customerId,
+        return_url: `${url.origin}/pricing.html`,
+    });
+    return json({ url: session.url });
+}
+
+// Constant-time hex comparison — a plain === short-circuits on the first
+// differing character, which leaks how much of a forged signature matched.
+function timingSafeEqualHex(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    return diff === 0;
+}
+
+// Verify a Stripe-Signature header: HMAC-SHA256 of `${t}.${rawBody}` keyed
+// by the webhook secret must match a v1 entry, and t must be < 5 min old
+// (replay protection).
+async function verifyStripeSignature(env, rawBody, header) {
+    let t = null;
+    const v1s = [];
+    for (const piece of (header || '').split(',')) {
+        const idx = piece.indexOf('=');
+        if (idx < 0) continue;
+        const k = piece.slice(0, idx).trim();
+        const v = piece.slice(idx + 1).trim();
+        if (k === 't') t = v;
+        else if (k === 'v1') v1s.push(v);
+    }
+    if (!t || !v1s.length) return false;
+    if (Math.abs(Math.floor(Date.now() / 1000) - Number(t)) > 300) return false;
+
+    const key = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode(env.STRIPE_WEBHOOK_SECRET),
+        { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    );
+    const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${rawBody}`));
+    const expected = bytesToHex(new Uint8Array(mac));
+    return v1s.some((sig) => timingSafeEqualHex(expected, sig));
+}
+
+async function userIdForCustomer(env, customerId) {
+    if (!customerId) return null;
+    const row = await env.DB.prepare(
+        'SELECT user_id FROM billing_customers WHERE stripe_customer_id = ?'
+    ).bind(customerId).first();
+    return row?.user_id ?? null;
+}
+
+async function upsertSubscriptionRow(env, userId, sub) {
+    // current_period_end lives on the subscription in older Stripe API
+    // versions and on its first item in newer ones — accept either.
+    const periodEnd = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? null;
+    const priceId = sub.items?.data?.[0]?.price?.id ?? null;
+    await env.DB.prepare(
+        `INSERT INTO subscriptions
+            (stripe_subscription_id, user_id, status, price_id, current_period_end, cancel_at_period_end, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(stripe_subscription_id) DO UPDATE SET
+            status = excluded.status, price_id = excluded.price_id,
+            current_period_end = excluded.current_period_end,
+            cancel_at_period_end = excluded.cancel_at_period_end,
+            updated_at = excluded.updated_at`
+    ).bind(sub.id, userId, sub.status, priceId, periodEnd, sub.cancel_at_period_end ? 1 : 0,
+           Math.floor(Date.now() / 1000)).run();
+}
+
+// checkout.session.completed — link customer->user, then either grant a
+// credit pack (mode=payment) or mirror the new subscription.
+async function handleCheckoutCompleted(env, session) {
+    const userId = session.client_reference_id
+        || session.metadata?.user_id
+        || await userIdForCustomer(env, session.customer);
+    if (!userId) return; // nothing to link this payment to
+
+    const now = Math.floor(Date.now() / 1000);
+    if (session.customer) {
+        await env.DB.prepare(
+            'INSERT OR IGNORE INTO billing_customers (user_id, stripe_customer_id, created_at) VALUES (?, ?, ?)'
+        ).bind(userId, session.customer, now).run();
+    }
+
+    if (session.mode === 'payment') {
+        // Credit pack: grant once per checkout session (webhook retries are
+        // no-ops thanks to the stripe_ref dedupe).
+        const dupe = await env.DB.prepare(
+            "SELECT id FROM credit_ledger WHERE stripe_ref = ? AND reason = 'purchase'"
+        ).bind(session.id).first();
+        if (!dupe) {
+            await env.DB.prepare(
+                `INSERT INTO credit_ledger (id, user_id, delta, reason, stripe_ref, created_at)
+                 VALUES (?, ?, ?, 'purchase', ?, ?)`
+            ).bind(`cl_${crypto.randomUUID()}`, userId, creditsPerPack(env), session.id, now).run();
+        }
+        return;
+    }
+
+    if (session.subscription) {
+        // Pull the full subscription so status/period land immediately;
+        // customer.subscription.updated keeps it fresh afterwards.
+        const sub = await stripeGet(env, `subscriptions/${session.subscription}`);
+        await upsertSubscriptionRow(env, userId, sub);
+    }
+}
+
+// customer.subscription.updated / .deleted — mirror the new state.
+async function handleSubscriptionEvent(env, sub) {
+    const userId = sub.metadata?.user_id || await userIdForCustomer(env, sub.customer);
+    if (!userId) return;
+    await upsertSubscriptionRow(env, userId, sub);
+}
+
+// 'YYYY-MM' buckets a [startSec, nowSec] span touches — a monthly billing
+// period covers at most two calendar months.
+function monthsTouched(startSec, endSec) {
+    const months = new Set();
+    const d = new Date(startSec * 1000);
+    d.setUTCDate(1);
+    d.setUTCHours(0, 0, 0, 0);
+    while (d.getTime() <= endSec * 1000) {
+        months.add(d.toISOString().slice(0, 7));
+        d.setUTCMonth(d.getUTCMonth() + 1);
+    }
+    return [...months];
+}
+
+// Renewal-reminder email via Resend. Failure is non-fatal — the in-app
+// banner (pending_renewal on /api/me) still shows either way. Low-usage
+// subscribers get a nudge that cancelling or switching to credit packs is
+// fine; everyone else gets the plain reminder.
+async function sendRenewalEmail(env, origin, to, { renewalAt, amountCents, currency, used, lowUsage }) {
+    const date = new Date(renewalAt * 1000).toUTCString().slice(0, 16); // "Mon, 03 Aug 2026"
+    const amount = amountCents != null
+        ? `${(amountCents / 100).toFixed(2)} ${(currency || 'usd').toUpperCase()}`
+        : 'the usual amount';
+    // The manage/cancel entry point is the pricing page (its "Manage
+    // subscription" button opens the Stripe portal) — portal session URLs
+    // are short-lived, so one minted now would be dead by the time the
+    // email is read.
+    const manage = `${origin}/pricing.html`;
+
+    const intro = `<p>Your Lisa 1000 Premium subscription renews on <strong>${date}</strong> for <strong>${amount}</strong>.</p>`;
+    const html = lowUsage
+        ? `${intro}
+<p>You've only created ${used} ${used === 1 ? 'story' : 'stories'} this billing period. If Lisa 1000 isn't
+part of your routine right now, you can <a href="${manage}">cancel your subscription</a> — or switch to a
+<a href="${manage}">one-time credit pack</a> and pay only for what you use.</p>`
+        : `${intro}
+<p>No action is needed to keep unlimited stories. To manage or cancel your subscription any time,
+visit <a href="${manage}">${manage}</a>.</p>`;
+
+    const resp = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            from: 'Lisa 1000 <billing@lisa1000.com>',
+            to: [to],
+            subject: 'Your Lisa 1000 subscription renews soon',
+            html,
+        }),
+    });
+    if (!resp.ok) console.error('Resend reminder email failed:', resp.status, await resp.text());
+    return resp.ok;
+}
+
+// invoice.upcoming — record the coming renewal (frontend banner) and send
+// the optional reminder email. Fires days before Stripe actually charges,
+// which is the whole point: time to cancel.
+async function handleInvoiceUpcoming(env, url, invoice) {
+    // The subscription id moved under `parent` in newer Stripe API versions.
+    const subscriptionId = invoice.subscription
+        || invoice.parent?.subscription_details?.subscription
+        || null;
+    const userId = await userIdForCustomer(env, invoice.customer);
+    if (!userId || !subscriptionId) return;
+
+    const now = Math.floor(Date.now() / 1000);
+    const renewalAt = invoice.next_payment_attempt || invoice.period_end || null;
+    if (!renewalAt) return;
+
+    // One notice per (subscription, renewal moment) — webhook retries no-op.
+    const dupe = await env.DB.prepare(
+        'SELECT id FROM renewal_notices WHERE stripe_subscription_id = ? AND renewal_at = ?'
+    ).bind(subscriptionId, renewalAt).first();
+    if (dupe) return;
+
+    // Stories generated this billing period, approximated by summing the
+    // calendar-month buckets the period touches (usage_counters is monthly).
+    const months = monthsTouched(invoice.period_start || now - 30 * 86400, now);
+    const usedRow = await env.DB.prepare(
+        `SELECT COALESCE(SUM(stories), 0) AS used FROM usage_counters
+         WHERE user_id = ? AND month IN (${months.map(() => '?').join(',')})`
+    ).bind(userId, ...months).first();
+    const used = usedRow?.used ?? 0;
+    const lowUsage = used <= LOW_USAGE_THRESHOLD;
+
+    const noticeId = `rn_${crypto.randomUUID()}`;
+    await env.DB.prepare(
+        `INSERT INTO renewal_notices
+            (id, user_id, stripe_subscription_id, renewal_at, amount_cents, currency,
+             notified_at, emailed, used_this_period, low_usage)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+    ).bind(noticeId, userId, subscriptionId, renewalAt,
+           invoice.amount_due ?? invoice.total ?? null, invoice.currency || null,
+           now, used, lowUsage ? 1 : 0).run();
+
+    // Email is best-effort and only when Resend is configured; the banner
+    // above works regardless.
+    if (env.RESEND_API_KEY) {
+        const user = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(userId).first();
+        if (user?.email) {
+            const sent = await sendRenewalEmail(env, url.origin, user.email, {
+                renewalAt,
+                amountCents: invoice.amount_due ?? invoice.total ?? null,
+                currency: invoice.currency,
+                used,
+                lowUsage,
+            });
+            if (sent) {
+                await env.DB.prepare('UPDATE renewal_notices SET emailed = 1 WHERE id = ?').bind(noticeId).run();
+            }
+        }
+    }
+}
+
+// POST /api/billing/webhook — Stripe events, signature verified by hand
+// (WebCrypto HMAC, no SDK). Verified-but-unhandled events still get a 200
+// so Stripe doesn't retry them forever.
+async function handleBillingWebhook(env, request, url) {
+    if (!env.DB) return json({ error: 'Database not configured' }, 501);
+    if (!env.STRIPE_WEBHOOK_SECRET) return json({ error: 'Webhook not configured' }, 501);
+
+    const rawBody = await request.text();
+    if (!(await verifyStripeSignature(env, rawBody, request.headers.get('Stripe-Signature')))) {
+        return json({ error: 'Invalid signature' }, 400);
+    }
+
+    let event;
+    try {
+        event = JSON.parse(rawBody);
+    } catch {
+        return json({ error: 'Bad payload' }, 400);
+    }
+    const obj = event.data?.object || {};
+
+    switch (event.type) {
+        case 'checkout.session.completed':
+            await handleCheckoutCompleted(env, obj);
+            break;
+        case 'customer.subscription.updated':
+        case 'customer.subscription.deleted':
+            await handleSubscriptionEvent(env, obj);
+            break;
+        case 'invoice.upcoming':
+            await handleInvoiceUpcoming(env, url, obj);
+            break;
+        default:
+            return json({ received: true, ignored: true });
+    }
+    return json({ received: true });
 }
 
 // ---------- Media storage (R2) ----------
@@ -1344,6 +1853,11 @@ export default {
             // 529 overloaded, 5xx) with exponential backoff before giving up.
             const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 5 });
             if (method === 'POST') {
+                // The webhook must see the raw body — signature verification
+                // hashes the exact bytes Stripe sent — so it's routed before
+                // the shared JSON parse below consumes the stream.
+                if (path === '/api/billing/webhook') return await handleBillingWebhook(env, request, url);
+
                 const body = await request.json().catch(() => ({}));
 
                 if (path === '/definition') return await handleDefinition(env, anthropic, body.word);
@@ -1351,7 +1865,9 @@ export default {
                 if (path === '/generate-speech' || path === '/api/synthesize-speech') {
                     return await handleSpeech(env, body);
                 }
-                if (path === '/generate-story') return await handleGenerateStory(env, anthropic, body);
+                if (path === '/generate-story') return await handleGenerateStory(env, anthropic, request, body);
+                if (path === '/api/billing/checkout') return await handleBillingCheckout(env, request, url, body);
+                if (path === '/api/billing/portal') return await handleBillingPortal(env, request, url);
                 if (path === '/api/works') return await handleCreateWork(env, request, body);
                 if (path.startsWith('/api/works/') && path.endsWith('/view')) {
                     const id = decodeURIComponent(path.slice('/api/works/'.length, -'/view'.length));

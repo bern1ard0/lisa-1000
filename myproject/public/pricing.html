@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pricing · Lisa 1000</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="nav-container">
+            <a href="index.html" class="brand"><span class="brand-mark">✦</span>LISA 1000</a>
+            <nav>
+                <ul>
+                    <li><a href="index.html">Home</a></li>
+                    <li><a href="library.html">Library</a></li>
+                    <li><a href="create-story.html">Create Story</a></li>
+                    <li><a href="pricing.html">Pricing</a></li>
+                    <li>
+                        <select id="nativeLanguage">
+                            <option value="default">Translate into…</option>
+                            <option value="en">English</option>
+                            <option value="fr">Français</option>
+                            <option value="es">Español</option>
+                            <option value="de">Deutsch</option>
+                            <option value="zh">中文</option>
+                            <option value="ar">العربية</option>
+                            <option value="other">Other...</option>
+                        </select>
+                        <input type="text" id="otherLanguage" class="hidden" placeholder="Please specify your language">
+                    </li>
+                    <li>
+                        <div id="translation-toggle" class="translation-toggle" title="Translate mode: when on, double-clicking a word translates it into your language instead of defining it" aria-label="Toggle translate mode" role="button">🌐</div>
+                    </li>
+                    <li id="auth-nav"></li>
+                </ul>
+            </nav>
+        </div>
+        <div class="page-header">
+            <div class="star-field" data-stars="22" aria-hidden="true"></div>
+            <img src="images/covers/story_5.webp" alt="" class="header-float left">
+            <img src="images/covers/story_8.webp" alt="" class="header-float right">
+            <div class="page-header-inner">
+                <h1>Pricing</h1>
+                <p>Start free, dream big — upgrade whenever the stories can't stop coming.</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="pricing-main">
+        <p id="upgradeSuccess" class="upgrade-success hidden">🎉 You're all set — welcome to Premium! Unlimited stories await.</p>
+
+        <section class="pricing-grid" aria-label="Plans">
+            <div class="plan-card">
+                <h2 class="plan-name">Free</h2>
+                <div class="plan-price">$0<span class="plan-price-period">/mo</span></div>
+                <ul class="plan-features">
+                    <li>5 story generations a month</li>
+                    <li>Full story library</li>
+                    <li>Lifelike narration</li>
+                    <li>Definitions &amp; translation</li>
+                </ul>
+                <p id="freeUsageNote" class="plan-status hidden"></p>
+                <a href="create-story.html" class="btn-ghost plan-cta">Start creating</a>
+            </div>
+
+            <div class="plan-card plan-premium">
+                <span class="plan-badge">✨ Most magical</span>
+                <h2 class="plan-name">Premium</h2>
+                <!-- OWNER: set the real price display below (e.g. $4.99) to match the
+                     monthly price configured in Stripe. This text is display-only —
+                     checkout always charges whatever Stripe is configured with. -->
+                <div class="plan-price">$—<span class="plan-price-period">/mo</span></div>
+                <ul class="plan-features">
+                    <li>Unlimited stories</li>
+                    <li>Everything in Free</li>
+                    <li>Priority image generation</li>
+                </ul>
+                <p id="premiumStatus" class="plan-status hidden"></p>
+                <button id="upgradeButton" class="btn-primary plan-cta">Go Premium ✨</button>
+            </div>
+
+            <div class="plan-card">
+                <h2 class="plan-name">Credit pack</h2>
+                <!-- OWNER: set the real price display below (e.g. $9.99) to match the
+                     one-time credit-pack price configured in Stripe. Display-only —
+                     checkout always charges whatever Stripe is configured with. -->
+                <div class="plan-price">$—<span class="plan-price-period">one-time</span></div>
+                <ul class="plan-features">
+                    <li>Pay once — no subscription</li>
+                    <li>20 story credits</li>
+                    <li>Credits never expire</li>
+                </ul>
+                <p id="creditsBalanceNote" class="plan-status hidden"></p>
+                <button id="buyCreditsButton" class="btn-ghost plan-cta">Buy credits</button>
+            </div>
+        </section>
+
+        <p class="renewal-note">Renews monthly · cancel anytime · we'll remind you before every renewal.</p>
+        <p class="renewal-note">If you're paying for Premium but barely using it, we'll notice and remind you — cancel or switch to credits, no hard feelings.</p>
+
+        <section class="pricing-faq">
+            <h3>What happens if I cancel?</h3>
+            <p>No hard feelings — you keep Premium until the end of the period you've already paid for, then you simply move back to the Free plan. Every story you've saved stays yours.</p>
+        </section>
+    </main>
+
+    <footer>
+        <span class="footer-brand">✦ LISA 1000</span>
+        <div class="footer-links">
+            <button id="aboutButton">About Us</button>
+            <a href="index.html">Home</a>
+            <a href="create-story.html">Create story</a>
+        </div>
+    </footer>
+    <script src="js/stars.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/billing.js"></script>
+</body>
+</html>

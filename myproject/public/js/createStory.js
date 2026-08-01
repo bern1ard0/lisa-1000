@@ -11,6 +11,32 @@ function notifyUser(title, text) {
     }
 }
 
+// Shown when the server answers 402 free_limit_reached: the monthly free
+// allowance (and any credits) is spent, so offer the jump to the pricing page.
+async function promptUpgradeAfterLimit(detail) {
+    const used = detail.used != null ? detail.used : (detail.limit || 5);
+    const limit = detail.limit || 5;
+    const target = detail.upgrade || '/pricing.html';
+    const text = `You've used ${used} of your ${limit} free stories this month — ` +
+        'go Premium for unlimited stories, or buy a one-time credit pack and pay only for what you use.';
+    if (!window.Swal) {
+        if (confirm(text + '\nSee plans?')) window.location.href = target;
+        return;
+    }
+    const result = await Swal.fire({
+        icon: 'info',
+        title: 'Free stories used up',
+        text: text,
+        showCancelButton: true,
+        confirmButtonText: 'See plans ✨',
+        cancelButtonText: 'Not now',
+        confirmButtonColor: '#8B5CF6',
+        background: '#171130',
+        color: '#EDEAF7',
+    });
+    if (result.isConfirmed) window.location.href = target;
+}
+
 function languageName(lang, otherLanguage) {
     switch (lang) {
         case 'fr': return 'French';
@@ -79,6 +105,11 @@ async function generateStory(prompt) {
                 console.error('Server error body:', errBody);
                 let parsed = {};
                 try { parsed = JSON.parse(errBody); } catch (_) { /* not JSON */ }
+                if (response.status === 402 && parsed.error === 'free_limit_reached') {
+                    lastGenerationError = "You've reached this month's free story limit — see the Pricing page for unlimited stories or credit packs.";
+                    promptUpgradeAfterLimit(parsed);
+                    return null;
+                }
                 lastGenerationError = parsed.error || `The story server returned an error (${response.status}).`;
                 if (parsed.retryable && attempt === 0) {
                     console.log('Temporary overload — retrying once in 8s...');
@@ -738,6 +769,43 @@ document.addEventListener('dblclick', handleDoubleClick);
 document.getElementById('translation-toggle').addEventListener('click', function() {
     this.classList.toggle('active');
     console.log('Translation toggle:', this.classList.contains('active'));
+});
+
+// Small "N of 5 free stories used this month" hint above the create tabs
+// for signed-in free users (with their credit balance when they have one);
+// premium users never see it. Waits for DOMContentLoaded because auth.js —
+// which creates window.lisaMeFullPromise — loads after this script.
+document.addEventListener('DOMContentLoaded', async function () {
+    if (!window.lisaMeFullPromise) return;
+    let data = null;
+    try {
+        data = await window.lisaMeFullPromise;
+    } catch (error) {
+        return;
+    }
+    if (!data || !data.user) return;
+    const src = (data.plan || data.usage || data.credits) ? data : data.user;
+    const plan = src.plan || 'free';
+    const usage = src.usage;
+    const credits = src.credits;
+    if (plan === 'premium' || !usage || !usage.limit) return;
+
+    const tabs = document.getElementById('create-story-section');
+    if (!tabs) return;
+    const hint = document.createElement('p');
+    hint.className = 'usage-hint';
+    let label = `✨ ${usage.used} of ${usage.limit} free stories used this month`;
+    // Credits are spent automatically once the free stories run out.
+    if (credits && credits.balance > 0) label += ` · ${credits.balance} credits available`;
+    hint.append(label);
+    if (usage.used >= usage.limit && !(credits && credits.balance > 0)) {
+        hint.append(' — ');
+        const link = document.createElement('a');
+        link.href = 'pricing.html';
+        link.textContent = 'go Premium or buy credits';
+        hint.appendChild(link);
+    }
+    tabs.insertAdjacentElement('beforebegin', hint);
 });
 
 // On load: check sign-in state, then — if a story was stashed before a
